@@ -15,10 +15,9 @@ import {
   handlePos, weightPos, handleBracketPos, weightBracketPos,
 } from "./physics.js";
 
-// Visual radius for the stacked weight plates, in metres. Intentionally
-// oversized vs. real Olympic plates (~0.225 m) so the load is always
-// clearly visible on screen, roughly the same scale as the main arm.
-const PLATE_RADIUS_M = 0.38;
+// Visual radius for the stacked weight plates, in metres. Deliberately
+// compact so the plates don't dominate the scene.
+const PLATE_RADIUS_M = 0.08;
 
 const COL = {
   bg: "#0f1115",
