@@ -192,7 +192,13 @@ function redraw() {
   $("#stat-low").textContent = fmt(low.fN);
   $("#stat-current").textContent = fmt(cur.fN);
   $("#stat-variation").textContent = `${variation.toFixed(0)}%`;
-  $("#stat-handle-y").textContent = `${(handlePos(ps, currentTheta).y * 100).toFixed(0)} cm`;
+  // Handle position. X is horizontal distance from the rack face (the inner
+  // face sits at pivot.x + 0.02 in the current rack model). Y is height
+  // above floor (floor = world y=0).
+  const h = handlePos(ps, currentTheta);
+  const rackFaceX = state.pivot.x + 0.02;
+  $("#stat-handle-x").textContent = `${((h.x - rackFaceX) * 100).toFixed(0)} cm`;
+  $("#stat-handle-y").textContent = `${(h.y * 100).toFixed(0)} cm`;
 }
 
 const SLIDER_IDS = [
