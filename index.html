@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>RX Mini Arms — Force Curve Simulator</title>
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body class="mode-plate">
+<header>
+  <h1>RX Mini Arms — Force Curve Simulator</h1>
+  <div class="subtitle">2D model · plate or cable load · push-n-pull mini arms</div>
+</header>
+
+<main>
+  <section class="viewport">
+    <div class="canvas-wrap">
+      <canvas id="scene"></canvas>
+      <div class="legend">
+        <span><i style="background:#ffd166"></i> handle</span>
+        <span><i style="background:#ef476f"></i> weight arm</span>
+        <span><i style="background:#06d6a0"></i> cable</span>
+        <span><i style="background:#e0e6f1"></i> arm</span>
+      </div>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="plot"></canvas>
+    </div>
+    <div class="stats">
+      <div><label>Peak force</label><span id="stat-peak">—</span></div>
+      <div><label>Min force</label><span id="stat-low">—</span></div>
+      <div><label>At current</label><span id="stat-current">—</span></div>
+      <div><label>Min / peak</label><span id="stat-variation">—</span></div>
+      <div><label>Handle height</label><span id="stat-handle-y">—</span></div>
+    </div>
+  </section>
+
+  <aside class="controls">
+    <div class="group">
+      <h3>Load mode</h3>
+      <label class="radio"><input type="radio" name="mode" value="plate" /> Plate-loaded</label>
+      <label class="radio"><input type="radio" name="mode" value="cable" /> Cable stack</label>
+    </div>
+
+    <div class="group">
+      <h3>Geometry</h3>
+      <label>Pivot height <span id="pivotY-val"></span>
+        <input type="range" id="pivotY" min="0.4" max="2.2" step="0.01" /></label>
+      <label>Handle arm length <span id="lHandle-val"></span>
+        <input type="range" id="lHandle" min="0.2" max="1.2" step="0.01" /></label>
+      <label>Handle arm angle <span id="aHandle-val"></span>
+        <input type="range" id="aHandle" min="-180" max="180" step="1" /></label>
+      <label>Weight arm length <span id="lWeight-val"></span>
+        <input type="range" id="lWeight" min="0.05" max="0.8" step="0.01" /></label>
+      <label>Weight arm angle <span id="aWeight-val"></span>
+        <input type="range" id="aWeight" min="-180" max="180" step="1" /></label>
+    </div>
+
+    <div class="group plate-only">
+      <h3>Plates</h3>
+      <label>Plate load <span id="plateKg-val"></span>
+        <input type="range" id="plateKg" min="0" max="200" step="2.5" /></label>
+    </div>
+
+    <div class="group cable-only">
+      <h3>Cable stack</h3>
+      <label>Stack weight <span id="stackKg-val"></span>
+        <input type="range" id="stackKg" min="0" max="150" step="2.5" /></label>
+      <label>Mechanical advantage <span id="cableMA-val"></span>
+        <input type="range" id="cableMA" min="0.5" max="4" step="0.1" /></label>
+      <label>Pulley X <span id="pulleyX-val"></span>
+        <input type="range" id="pulleyX" min="-2" max="2" step="0.02" /></label>
+      <label>Pulley Y <span id="pulleyY-val"></span>
+        <input type="range" id="pulleyY" min="-0.5" max="2.5" step="0.02" /></label>
+    </div>
+
+    <div class="group">
+      <h3>Arm self-weight</h3>
+      <label>Arm mass <span id="armMassKg-val"></span>
+        <input type="range" id="armMassKg" min="0" max="20" step="0.5" /></label>
+      <label>CoM fraction <span id="armComFrac-val"></span>
+        <input type="range" id="armComFrac" min="0" max="1" step="0.01" /></label>
+    </div>
+
+    <div class="group">
+      <h3>Range of motion</h3>
+      <label>Start angle <span id="romStart-val"></span>
+        <input type="range" id="romStart" min="-120" max="60" step="1" /></label>
+      <label>End angle <span id="romEnd-val"></span>
+        <input type="range" id="romEnd" min="-60" max="120" step="1" /></label>
+      <label>Current angle <span id="currentAngle-val"></span>
+        <input type="range" id="currentAngle" min="-120" max="120" step="1" /></label>
+      <label class="checkbox"><input type="checkbox" id="animate" /> Animate rep</label>
+    </div>
+
+    <div class="group">
+      <h3>Plot</h3>
+      <label>X axis
+        <select id="xAxis">
+          <option value="angle">Arm angle</option>
+          <option value="disp">Handle vertical displacement</option>
+        </select>
+      </label>
+      <label>Units
+        <select id="unit">
+          <option value="kgf">kgf</option>
+          <option value="N">Newtons</option>
+        </select>
+      </label>
+      <label>Strength-curve overlay
+        <select id="overlay">
+          <option value="none">None</option>
+          <option value="ascending">Ascending</option>
+          <option value="descending">Descending</option>
+          <option value="bell">Bell</option>
+          <option value="flat">Flat</option>
+        </select>
+      </label>
+    </div>
+
+    <button id="reset">Reset defaults</button>
+  </aside>
+</main>
+
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>
