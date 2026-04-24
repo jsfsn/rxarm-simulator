@@ -43,16 +43,28 @@
     </div>
 
     <div class="group">
-      <h3>Geometry</h3>
+      <h3>Main arm</h3>
       <label>Pivot height <span id="pivotY-val"></span>
         <input type="range" id="pivotY" min="0.4" max="2.2" step="0.01" /></label>
+      <label>Main arm length (pivot → handle bracket) <span id="lArm-val"></span>
+        <input type="range" id="lArm" min="0.20" max="1.20" step="0.01" /></label>
+      <label>Weight bracket position (from pivot) <span id="lWeightMount-val"></span>
+        <input type="range" id="lWeightMount" min="0.05" max="1.20" step="0.01" /></label>
+    </div>
+
+    <div class="group">
+      <h3>Handle bracket</h3>
       <label>Handle arm length <span id="lHandle-val"></span>
-        <input type="range" id="lHandle" min="0.2" max="1.2" step="0.01" /></label>
-      <label>Handle arm angle <span id="aHandle-val"></span>
+        <input type="range" id="lHandle" min="0.00" max="0.60" step="0.01" /></label>
+      <label>Handle bracket rotation <span id="aHandle-val"></span>
         <input type="range" id="aHandle" min="-180" max="180" step="1" /></label>
+    </div>
+
+    <div class="group">
+      <h3>Weight bracket</h3>
       <label>Weight arm length <span id="lWeight-val"></span>
-        <input type="range" id="lWeight" min="0.05" max="0.8" step="0.01" /></label>
-      <label>Weight arm angle <span id="aWeight-val"></span>
+        <input type="range" id="lWeight" min="0.00" max="0.60" step="0.01" /></label>
+      <label>Weight bracket rotation <span id="aWeight-val"></span>
         <input type="range" id="aWeight" min="-180" max="180" step="1" /></label>
     </div>
 

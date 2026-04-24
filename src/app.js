@@ -10,17 +10,22 @@ const G = 9.80665;
 const defaultState = () => ({
   mode: "plate",
   pivot: { x: 0, y: 1.3 },
-  lHandle: 0.58,
-  aHandle: 0,      // degrees, offset of handle arm from reference
-  lWeight: 0.30,
-  aWeight: 180,    // plate horn opposite the handle by default
+  // Main arm: rack pivot → handle bracket at the far end.
+  lArm: 0.58,
+  // Weight bracket position along the main arm (distance from pivot).
+  lWeightMount: 0.29,
+  // Sub-arms extending from each bracket.
+  lHandle: 0.15,
+  aHandle: 0,       // degrees: bracket rotation, 0 = inline with main arm
+  lWeight: 0.18,
+  aWeight: -60,     // default: peg angled down-and-back from the main arm
   plateKg: 40,
   stackKg: 40,
   cableMA: 1,
-  pulley: { x: -0.8, y: 0.4 },
+  pulley: { x: -0.9, y: 0.4 },
   armMassKg: 6,
   armComFrac: 0.45,
-  romStart: -30,   // degrees
+  romStart: -30,
   romEnd: 30,
   currentAngle: 0,
   xAxis: "angle",
@@ -45,13 +50,15 @@ const $ = (sel) => document.querySelector(sel);
 const sceneCanvas = $("#scene");
 const plotCanvas = $("#plot");
 
+// Match internal canvas resolution to the rendered size in device pixels.
+// The renderers work in device pixels directly — no dpr transform — so on
+// high-DPI displays we still draw at native resolution but the coordinate
+// math stays consistent with `canvas.width` / `canvas.height`.
 function fitCanvas(c) {
   const dpr = window.devicePixelRatio || 1;
   const rect = c.getBoundingClientRect();
   c.width = Math.max(1, Math.floor(rect.width * dpr));
   c.height = Math.max(1, Math.floor(rect.height * dpr));
-  const ctx = c.getContext("2d");
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
 function resizeAll() {
@@ -62,6 +69,8 @@ function resizeAll() {
 
 function formatVal(key, v) {
   switch (key) {
+    case "lArm":
+    case "lWeightMount":
     case "lHandle":
     case "lWeight":
       return `${(v * 100).toFixed(0)} cm`;
@@ -185,6 +194,7 @@ function redraw() {
 }
 
 const SLIDER_IDS = [
+  "lArm", "lWeightMount",
   "lHandle", "aHandle", "lWeight", "aWeight",
   "pivotY", "romStart", "romEnd", "currentAngle",
   "plateKg", "stackKg", "cableMA",

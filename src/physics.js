@@ -1,57 +1,77 @@
-// RX Arm 2D physics model.
+// RX Mini Arms 2D physics.
 //
-// World: x-right, y-UP, units in metres, angles in radians.
-// The arm is a rigid body rotating about a pivot attached to the rack.
-// On the arm there are two extensions (each specified by length and angular
-// offset from the arm's reference direction):
-//   - the HANDLE arm, where the user applies force
-//   - the WEIGHT arm, where the load is applied (plates or cable attachment)
+// Mechanism:
+//   - MAIN ARM pivots on the rack at the rack pin (rotation axis = page normal).
+//   - WEIGHT BRACKET sits at a configurable distance along the main arm.
+//     From it the WEIGHT ARM extends, set to an angle relative to the main
+//     arm (360° indexable on the hardware) and rigidly locked.
+//   - HANDLE BRACKET sits at the end of the main arm. From it the HANDLE ARM
+//     extends, again at a locked 360° angle relative to the main arm.
 //
-// Sign convention for armAngle (theta):
-//   theta = 0     → arm points along +x (horizontal, out from the rack)
-//   theta > 0     → rotates CCW (handle moves up for a press)
+// During exercise the whole assembly rotates as one rigid body about the
+// rack pin. The sub-arm angles (aHandle, aWeight) don't change during the
+// rep — they're set once via the indexable dials.
 //
-// User force assumption:
-//   The user pushes perpendicular to the handle-arm radius, i.e. tangentially.
-//   F_user is reported as a magnitude (positive = load the user must overcome).
+// World: x-right, y-UP, metres, radians. θ (the main-arm rotation) = 0
+// points along +x, grows CCW.
 
 const G = 9.80665;
 
-export function handlePos(state, theta) {
-  const { pivot, lHandle, aHandle } = state;
-  const a = theta + aHandle;
+// --- Key points on the rigid body as functions of the main-arm angle θ ---
+
+export function handleBracketPos(state, theta) {
   return {
-    x: pivot.x + lHandle * Math.cos(a),
-    y: pivot.y + lHandle * Math.sin(a),
+    x: state.pivot.x + state.lArm * Math.cos(theta),
+    y: state.pivot.y + state.lArm * Math.sin(theta),
+  };
+}
+
+export function weightBracketPos(state, theta) {
+  return {
+    x: state.pivot.x + state.lWeightMount * Math.cos(theta),
+    y: state.pivot.y + state.lWeightMount * Math.sin(theta),
+  };
+}
+
+export function handlePos(state, theta) {
+  const b = handleBracketPos(state, theta);
+  const a = theta + state.aHandle;
+  return {
+    x: b.x + state.lHandle * Math.cos(a),
+    y: b.y + state.lHandle * Math.sin(a),
   };
 }
 
 export function weightPos(state, theta) {
-  const { pivot, lWeight, aWeight } = state;
-  const a = theta + aWeight;
+  const b = weightBracketPos(state, theta);
+  const a = theta + state.aWeight;
   return {
-    x: pivot.x + lWeight * Math.cos(a),
-    y: pivot.y + lWeight * Math.sin(a),
+    x: b.x + state.lWeight * Math.cos(a),
+    y: b.y + state.lWeight * Math.sin(a),
   };
 }
 
-// Signed torque about the pivot produced by a force F=(fx,fy) applied at
-// world point P=(px,py). z-component of (P-pivot) × F.
+// Distance from the rack pivot to the handle tip. The whole assembly is
+// rigid so this is constant across θ; law of cosines gives:
+//   R² = lArm² + lHandle² + 2·lArm·lHandle·cos(aHandle)
+export function effectiveHandleRadius(state) {
+  const la = state.lArm, lh = state.lHandle;
+  return Math.sqrt(la * la + lh * lh + 2 * la * lh * Math.cos(state.aHandle));
+}
+
+// --- Torque helpers ---
+
 function torqueAt(state, p, fx, fy) {
   const rx = p.x - state.pivot.x;
   const ry = p.y - state.pivot.y;
   return rx * fy - ry * fx;
 }
 
-// Torque from loaded plates: gravity acting at the weight-arm tip.
 function plateTorque(state, theta) {
   const wp = weightPos(state, theta);
-  const fy = -state.plateKg * G;
-  return torqueAt(state, wp, 0, fy);
+  return torqueAt(state, wp, 0, -state.plateKg * G);
 }
 
-// Torque from a cable pulling the weight-arm tip toward a fixed pulley.
-// Tension = stackKg * g * mechanicalAdvantage (MA=1 for a single cable run).
 function cableTorque(state, theta) {
   const wp = weightPos(state, theta);
   const dx = state.pulley.x - wp.x;
@@ -61,34 +81,31 @@ function cableTorque(state, theta) {
   return torqueAt(state, wp, (T * dx) / len, (T * dy) / len);
 }
 
-// Torque from the arm's own mass, if enabled. Treated as a point mass at
-// a configurable fraction of the handle-arm length (simple approximation).
+// Arm self-weight: point mass at a fraction of the main arm length.
 function armSelfTorque(state, theta) {
   if (!state.armMassKg) return 0;
   const comFrac = state.armComFrac ?? 0.5;
-  const comPos = {
-    x: state.pivot.x + comFrac * state.lHandle * Math.cos(theta),
-    y: state.pivot.y + comFrac * state.lHandle * Math.sin(theta),
+  const p = {
+    x: state.pivot.x + comFrac * state.lArm * Math.cos(theta),
+    y: state.pivot.y + comFrac * state.lArm * Math.sin(theta),
   };
-  return torqueAt(state, comPos, 0, -state.armMassKg * G);
+  return torqueAt(state, p, 0, -state.armMassKg * G);
 }
 
-// Quasi-static magnitude of force the user must apply at the handle,
-// assumed tangential (perpendicular to the handle-arm radius). The direction
-// flips depending on how the arm is oriented; the magnitude is what matters
-// for a force curve.
+// Magnitude of the (tangential) force the user must apply at the handle to
+// hold the arm statically at angle θ.
 export function forceAtHandle(state, theta) {
   let tauLoad = 0;
   if (state.mode === "plate") tauLoad += plateTorque(state, theta);
   else if (state.mode === "cable") tauLoad += cableTorque(state, theta);
   tauLoad += armSelfTorque(state, theta);
 
-  return Math.abs(tauLoad) / state.lHandle;
+  const R = effectiveHandleRadius(state);
+  if (R < 1e-6) return 0; // handle at pivot — undefined
+  return Math.abs(tauLoad) / R;
 }
 
-// Sweep across the ROM and return an array of samples for plotting.
-// Each sample: { theta, fN, fKgf, handle:{x,y}, handleDispM }
-// handleDispM is vertical handle displacement from the start of ROM.
+// Sweep across the ROM.
 export function sweep(state, nSamples = 181) {
   const { romStart, romEnd } = state;
   const out = new Array(nSamples);
@@ -113,10 +130,7 @@ export function peakForce(samples) {
   let peak = -Infinity;
   let idx = 0;
   for (let i = 0; i < samples.length; i++) {
-    if (samples[i].fN > peak) {
-      peak = samples[i].fN;
-      idx = i;
-    }
+    if (samples[i].fN > peak) { peak = samples[i].fN; idx = i; }
   }
   return { fN: peak, index: idx, sample: samples[idx] };
 }
@@ -125,10 +139,7 @@ export function minForce(samples) {
   let lo = Infinity;
   let idx = 0;
   for (let i = 0; i < samples.length; i++) {
-    if (samples[i].fN < lo) {
-      lo = samples[i].fN;
-      idx = i;
-    }
+    if (samples[i].fN < lo) { lo = samples[i].fN; idx = i; }
   }
   return { fN: lo, index: idx, sample: samples[idx] };
 }

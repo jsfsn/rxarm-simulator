@@ -19,32 +19,44 @@ python3 -m http.server 8000
 
 ## Model
 
-All geometry in the side view, metres, radians.
+The mechanism is a single rigid body rotating about the rack pivot:
+
+- **Main arm** (length `L_arm`) from the rack pivot to the handle bracket
+- **Weight bracket** sits at distance `L_wm` along the main arm; from it
+  the **weight arm** (length `L_w`) extends at a fixed angle `α_w` relative
+  to the main arm (the bracket is indexable 360° on the real hardware)
+- **Handle bracket** at the far end of the main arm; the **handle arm**
+  (length `L_h`) extends at a fixed angle `α_h` relative to the main arm
+
+When the user pulls/presses the handle, the entire assembly rotates by `θ`
+about the rack pivot. The sub-arm angles `α_h` and `α_w` don't change during
+the rep — they're locked in by the indexable dials.
 
 ```
-arm rotates by θ about pivot on the rack
-handle tip  = pivot + L_h · (cos(θ + α_h),  sin(θ + α_h))
-weight tip  = pivot + L_w · (cos(θ + α_w),  sin(θ + α_w))
+handle bracket  = pivot + L_arm · (cos θ,            sin θ)
+weight bracket  = pivot + L_wm  · (cos θ,            sin θ)
+handle tip      = bracket_h + L_h · (cos(θ + α_h),   sin(θ + α_h))
+weight tip      = bracket_w + L_w · (cos(θ + α_w),   sin(θ + α_w))
 ```
 
-**Torque balance about the pivot.** Load sources:
+**Torque balance about the rack pivot.** Load sources:
 
-- **Plate mode** — gravity on plate CoM at the weight-arm tip:
-  `τ_plate = -m_plate · g · (x_weight - x_pivot)`
-- **Cable mode** — tension `T = m_stack · g · MA` pulling the weight-arm tip
-  toward the fixed pulley. The cable unit vector `(û_x, û_y)` changes with θ:
-  `τ_cable = r × (T · û)` at the weight-arm tip.
-- **Arm self-weight** (optional) — point mass at a fraction of `L_h` along
-  the handle arm.
+- **Plate mode** — gravity at the weight tip:
+  `τ_plate = -m_plate · g · (x_weight_tip - x_pivot)`
+- **Cable mode** — tension `T = m_stack · g · MA` pulling the weight tip
+  toward a fixed pulley; direction changes with θ.
+- **Arm self-weight** — point mass at a fraction of `L_arm` along the main arm.
 
-User force is assumed perpendicular to the handle arm (tangential):
+User force is assumed tangential to the handle tip's motion circle around
+the pivot. The handle tip sits at a fixed geometric distance `R_h` from the
+pivot (law of cosines on the rigid body):
 
 ```
-F_user · L_h = |τ_load|   →   F_user = |τ_load| / L_h
+R_h = √( L_arm² + L_h² + 2·L_arm·L_h · cos α_h )
+F_user = |τ_load| / R_h
 ```
 
-This is the classic quasi-static lever equation — valid when velocity is low,
-which matches strength-training use.
+Quasi-static — velocity and inertia ignored, which is fine for strength work.
 
 ## What the plot shows
 
