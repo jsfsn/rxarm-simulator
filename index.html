@@ -20,7 +20,7 @@
         <span><i style="background:#ffd166"></i> handle</span>
         <span><i style="background:#ef476f"></i> weight arm</span>
         <span><i style="background:#06d6a0"></i> cable</span>
-        <span><i style="background:#e0e6f1"></i> arm</span>
+        <span><i style="background:#64b5ff"></i> user force</span>
       </div>
     </div>
     <div class="canvas-wrap">
@@ -110,6 +110,23 @@
       <label>Current angle <span id="currentAngle-val"></span>
         <input type="range" id="currentAngle" min="-120" max="120" step="1" /></label>
       <label class="checkbox"><input type="checkbox" id="animate" /> Animate rep</label>
+    </div>
+
+    <div class="group">
+      <h3>Force model</h3>
+      <label>User force direction
+        <select id="forceDir">
+          <optgroup label="Body-relative (scales magnitude only)">
+            <option value="tangent">Tangent to motion (min force)</option>
+            <option value="perpMain">Perpendicular to main arm</option>
+            <option value="perpHandle">Perpendicular to handle arm</option>
+          </optgroup>
+          <optgroup label="World-fixed (reshapes curve)">
+            <option value="horizontal">Horizontal (press/row, along arm axis)</option>
+            <option value="vertical">Vertical (overhead/pull-down)</option>
+          </optgroup>
+        </select>
+      </label>
     </div>
 
     <div class="group">

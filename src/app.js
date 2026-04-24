@@ -29,6 +29,7 @@ const defaultState = () => ({
   romStart: -30,
   romEnd: 30,
   currentAngle: 0,
+  forceDir: "perpMain",
   xAxis: "angle",
   unit: "kgf",
   overlay: "none",
@@ -247,6 +248,7 @@ function resetAll() {
     const out = $(`#${id}-val`);
     if (out) out.textContent = formatVal(id, v);
   });
+  $("#forceDir").value = state.forceDir;
   $("#xAxis").value = state.xAxis;
   $("#unit").value = state.unit;
   $("#overlay").value = state.overlay;
@@ -260,6 +262,7 @@ function resetAll() {
 function initApp() {
   SLIDER_IDS.forEach(bindSlider);
   bindRadio("mode", "mode");
+  bindSelect("forceDir", "forceDir");
   bindSelect("xAxis", "xAxis");
   bindSelect("unit", "unit");
   bindSelect("overlay", "overlay");

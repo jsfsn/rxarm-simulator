@@ -13,6 +13,7 @@
 
 import {
   handlePos, weightPos, handleBracketPos, weightBracketPos,
+  forceVectorAtHandle,
 } from "./physics.js";
 
 // Visual radius for the stacked weight plates, in metres. Deliberately
@@ -37,6 +38,8 @@ const COL = {
   plateRim: "#8e95a4",
   plateHub: "#8a93a4",
   cable: "#06d6a0",
+  forceArrow: "#64b5ff",
+  forceArrowHalo: "rgba(100, 181, 255, 0.25)",
   pulleyHousing: "#3a4150",
   pulleyRim: "#8a93a4",
   stack: "#262b36",
@@ -391,6 +394,60 @@ export function renderScene(canvas, state, currentTheta) {
 
   if (state.mode === "cable") drawCable(ctx, T, state, currentTheta);
 
+  // Force arrow at the handle, on top of the arm but below the rack bracket.
+  drawForceArrow(ctx, T, state, currentTheta);
+
   // Rack bracket over everything at the pivot.
   drawRackBracket(ctx, T, T.toPx(state.pivot));
+}
+
+// Force arrow: shows the direction and relative magnitude of the force the
+// user applies at the handle tip under `state.forceDir`. Length scales with
+// the force magnitude against a running reference so the arrow stays a
+// useful size regardless of load.
+function drawForceArrow(ctx, T, state, theta) {
+  const fv = forceVectorAtHandle(state, theta);
+  if (!isFinite(fv.fN) || fv.fN < 1) return;
+  const h = handlePos(state, theta);
+  const tipPx = T.toPx(h);
+
+  // canvas has both x and y flipped vs world coords
+  const screenDir = { x: -fv.dir.x, y: -fv.dir.y };
+
+  // Map force magnitude to arrow length. 1000 N (~100 kgf) → 120 px.
+  const maxLen = 140;
+  const len = Math.min(maxLen, 30 + fv.fN * 0.11);
+
+  const start = tipPx;
+  const end = { x: tipPx.x + screenDir.x * len, y: tipPx.y + screenDir.y * len };
+
+  // halo for visibility over busy scene
+  ctx.strokeStyle = COL.forceArrowHalo;
+  ctx.lineWidth = 10;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  ctx.lineTo(end.x, end.y);
+  ctx.stroke();
+
+  ctx.strokeStyle = COL.forceArrow;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  ctx.lineTo(end.x, end.y);
+  ctx.stroke();
+
+  // arrowhead
+  const headLen = 12;
+  const headAng = 0.45;
+  const ang = Math.atan2(screenDir.y, screenDir.x);
+  const h1 = { x: end.x - headLen * Math.cos(ang - headAng), y: end.y - headLen * Math.sin(ang - headAng) };
+  const h2 = { x: end.x - headLen * Math.cos(ang + headAng), y: end.y - headLen * Math.sin(ang + headAng) };
+  ctx.fillStyle = COL.forceArrow;
+  ctx.beginPath();
+  ctx.moveTo(end.x, end.y);
+  ctx.lineTo(h1.x, h1.y);
+  ctx.lineTo(h2.x, h2.y);
+  ctx.closePath();
+  ctx.fill();
 }

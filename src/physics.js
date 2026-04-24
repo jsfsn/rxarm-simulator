@@ -59,6 +59,47 @@ export function effectiveHandleRadius(state) {
   return Math.sqrt(la * la + lh * lh + 2 * la * lh * Math.cos(state.aHandle));
 }
 
+// Unit vector of the direction the user is assumed to apply force at the
+// handle tip. Body-relative modes (tangent / perpMain / perpHandle) rotate
+// with the arm and only scale the force magnitude. World-fixed modes
+// (horizontal / vertical) stay pointing along the world axes and genuinely
+// reshape the force curve because r rotates while F stays put.
+export function forceDirVector(state, theta) {
+  switch (state.forceDir) {
+    case "horizontal":
+      // along world +x (the direction the arm extends away from the rack)
+      return { x: 1, y: 0 };
+    case "vertical":
+      // along world +y (up)
+      return { x: 0, y: 1 };
+    case "perpMain":
+      return { x: -Math.sin(theta), y: Math.cos(theta) };
+    case "perpHandle": {
+      const a = theta + state.aHandle;
+      return { x: -Math.sin(a), y: Math.cos(a) };
+    }
+    case "tangent":
+    default: {
+      const h = handlePos(state, theta);
+      const rx = h.x - state.pivot.x;
+      const ry = h.y - state.pivot.y;
+      const r = Math.hypot(rx, ry) || 1;
+      return { x: -ry / r, y: rx / r };
+    }
+  }
+}
+
+// Signed effective lever arm: the moment arm of the applied unit force
+// about the pivot. (r × F̂)_z gives a positive value when the force tends
+// to rotate the arm CCW.
+export function effectiveLever(state, theta) {
+  const h = handlePos(state, theta);
+  const rx = h.x - state.pivot.x;
+  const ry = h.y - state.pivot.y;
+  const f = forceDirVector(state, theta);
+  return rx * f.y - ry * f.x;
+}
+
 // --- Torque helpers ---
 
 function torqueAt(state, p, fx, fy) {
@@ -101,8 +142,8 @@ function armSelfTorque(state, theta) {
   return torqueAt(state, p, 0, -state.armMassKg * G);
 }
 
-// Magnitude of the (tangential) force the user must apply at the handle to
-// hold the arm statically at angle θ.
+// Magnitude of the force the user must apply at the handle (in whichever
+// direction `state.forceDir` selects) to hold the arm statically at θ.
 export function forceAtHandle(state, theta) {
   let tauLoad = 0;
   if (state.mode === "plate") tauLoad += plateTorque(state, theta);
@@ -110,9 +151,33 @@ export function forceAtHandle(state, theta) {
   tauLoad += bracketPlateTorque(state, theta);
   tauLoad += armSelfTorque(state, theta);
 
-  const R = effectiveHandleRadius(state);
-  if (R < 1e-6) return 0; // handle at pivot — undefined
-  return Math.abs(tauLoad) / R;
+  const R = effectiveLever(state, theta);
+  // Near-singular geometries (e.g. world-horizontal push when the arm is
+  // exactly horizontal) would blow up to infinity. Cap at 100 000 N — clearly
+  // unphysical but keeps plots and stats finite so the rest of the sweep
+  // stays readable.
+  if (Math.abs(R) < 1e-3) return 1e5;
+  return Math.min(1e5, Math.abs(tauLoad / R));
+}
+
+// Like forceAtHandle, but returns the actual force vector applied at the
+// handle tip in equilibrium: magnitude and direction. Used for visualisation.
+export function forceVectorAtHandle(state, theta) {
+  let tauLoad = 0;
+  if (state.mode === "plate") tauLoad += plateTorque(state, theta);
+  else if (state.mode === "cable") tauLoad += cableTorque(state, theta);
+  tauLoad += bracketPlateTorque(state, theta);
+  tauLoad += armSelfTorque(state, theta);
+
+  const R = effectiveLever(state, theta);
+  const f = forceDirVector(state, theta);
+  if (Math.abs(R) < 1e-6) return { fN: 0, dir: f };
+  // τ_user + τ_load = 0 → F · R = -τ_load → F = -τ_load / R.
+  // Negative F means the user actually pushes opposite to f̂.
+  const F = -tauLoad / R;
+  const fN = Math.abs(F);
+  const dir = F >= 0 ? f : { x: -f.x, y: -f.y };
+  return { fN, dir };
 }
 
 // Sweep across the ROM.
