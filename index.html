@@ -33,6 +33,7 @@
       <div><label>Min / peak</label><span id="stat-variation">—</span></div>
       <div><label>Handle reach (from rack)</label><span id="stat-handle-x">—</span></div>
       <div><label>Handle height (above floor)</label><span id="stat-handle-y">—</span></div>
+      <div><label>Arm stretch (vs full reach)</label><span id="stat-arm-reach">—</span></div>
     </div>
   </section>
 
@@ -110,6 +111,19 @@
       <label>Current angle <span id="currentAngle-val"></span>
         <input type="range" id="currentAngle" min="-120" max="120" step="1" /></label>
       <label class="checkbox"><input type="checkbox" id="animate" /> Animate rep</label>
+    </div>
+
+    <div class="group">
+      <h3>User &amp; bench</h3>
+      <label class="checkbox"><input type="checkbox" id="showBody" /> Show user on bench</label>
+      <label>User height <span id="userHeightCm-val"></span>
+        <input type="range" id="userHeightCm" min="150" max="210" step="1" /></label>
+      <label>Bench angle <span id="benchAngle-val"></span>
+        <input type="range" id="benchAngle" min="0" max="80" step="1" /></label>
+      <label>Hip position (horizontal) <span id="hipX-val"></span>
+        <input type="range" id="hipX" min="0.2" max="1.5" step="0.01" /></label>
+      <label>Bench top height (at hip) <span id="hipY-val"></span>
+        <input type="range" id="hipY" min="0.30" max="0.80" step="0.01" /></label>
     </div>
 
     <div class="group">

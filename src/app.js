@@ -1,4 +1,5 @@
 import { sweep, peakForce, minForce, handlePos } from "./physics.js";
+import { anatomy, shoulderPos, solveArmIK } from "./body.js";
 import { renderScene } from "./render.js";
 import { renderPlot } from "./plot.js";
 
@@ -34,6 +35,12 @@ const defaultState = () => ({
   unit: "kgf",
   overlay: "none",
   animate: false,
+  // Body / bench
+  showBody: true,
+  userHeight: 1.80,     // metres
+  benchAngle: 0,        // degrees from horizontal (0 = flat, 90 = vertical)
+  hipX: 0.85,           // hip pivot position in world coords
+  hipY: 0.50,           // bench top height at hip
 });
 
 const state = defaultState();
@@ -94,7 +101,13 @@ function formatVal(key, v) {
     case "pivotY":
     case "pulleyX":
     case "pulleyY":
+    case "hipX":
+    case "hipY":
       return `${(+v).toFixed(2)} m`;
+    case "userHeightCm":
+      return `${(+v).toFixed(0)} cm`;
+    case "benchAngle":
+      return `${(+v).toFixed(0)}°`;
     default:
       return String(v);
   }
@@ -104,6 +117,7 @@ function setState(key, value) {
   if (key === "pivotY") state.pivot.y = value;
   else if (key === "pulleyX") state.pulley.x = value;
   else if (key === "pulleyY") state.pulley.y = value;
+  else if (key === "userHeightCm") state.userHeight = value / 100;
   else state[key] = value;
 }
 
@@ -111,6 +125,7 @@ function getStateVal(key) {
   if (key === "pivotY") return state.pivot.y;
   if (key === "pulleyX") return state.pulley.x;
   if (key === "pulleyY") return state.pulley.y;
+  if (key === "userHeightCm") return state.userHeight * 100;
   return state[key];
 }
 
@@ -200,6 +215,21 @@ function redraw() {
   const rackFaceX = state.pivot.x + 0.02;
   $("#stat-handle-x").textContent = `${((h.x - rackFaceX) * 100).toFixed(0)} cm`;
   $("#stat-handle-y").textContent = `${(h.y * 100).toFixed(0)} cm`;
+
+  // Arm-reach indicator
+  if (state.showBody) {
+    const anat = anatomy(state.userHeight);
+    const sh = shoulderPos(state);
+    const ik = solveArmIK(sh, h, anat.upper, anat.forearm);
+    const label = ik.reachable
+      ? `${ik.stretchPct.toFixed(0)}%`
+      : `out of reach`;
+    $("#stat-arm-reach").textContent = label;
+    $("#stat-arm-reach").style.color = ik.reachable ? "" : "#ef476f";
+  } else {
+    $("#stat-arm-reach").textContent = "—";
+    $("#stat-arm-reach").style.color = "";
+  }
 }
 
 const SLIDER_IDS = [
@@ -208,6 +238,7 @@ const SLIDER_IDS = [
   "pivotY", "romStart", "romEnd", "currentAngle",
   "plateKg", "plateKgBracket", "stackKg", "cableMA",
   "pulleyX", "pulleyY", "armMassKg", "armComFrac",
+  "userHeightCm", "benchAngle", "hipX", "hipY",
 ];
 
 let animReq = null;
@@ -253,6 +284,7 @@ function resetAll() {
   $("#unit").value = state.unit;
   $("#overlay").value = state.overlay;
   $("#animate").checked = state.animate;
+  $("#showBody").checked = state.showBody;
   document.querySelectorAll(`input[name="mode"]`).forEach((el) => {
     el.checked = el.value === state.mode;
   });
@@ -267,6 +299,7 @@ function initApp() {
   bindSelect("unit", "unit");
   bindSelect("overlay", "overlay");
   bindCheckbox("animate", "animate", toggleAnimation);
+  bindCheckbox("showBody", "showBody");
   $("#reset").addEventListener("click", resetAll);
   window.addEventListener("resize", resizeAll);
   resizeAll();

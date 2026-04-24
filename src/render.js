@@ -15,6 +15,7 @@ import {
   handlePos, weightPos, handleBracketPos, weightBracketPos,
   forceVectorAtHandle,
 } from "./physics.js";
+import { anatomy, shoulderPos, solveArmIK } from "./body.js";
 
 // Visual radius for the stacked weight plates, in metres. Deliberately
 // compact so the plates don't dominate the scene.
@@ -40,6 +41,13 @@ const COL = {
   cable: "#06d6a0",
   forceArrow: "#64b5ff",
   forceArrowHalo: "rgba(100, 181, 255, 0.25)",
+  bench: "#2e323d",
+  benchEdge: "#4a5161",
+  benchPad: "#3b424f",
+  bodySkin: "#9aa2b2",
+  bodyLine: "#c9d0dd",
+  bodyUnreachable: "#ef476f",
+  bodyGhost: "rgba(201, 208, 221, 0.18)",
   pulleyHousing: "#3a4150",
   pulleyRim: "#8a93a4",
   stack: "#262b36",
@@ -76,6 +84,15 @@ function sceneBounds(state) {
   // so much that it stretches the view vertically
   pts.push({ x: state.pivot.x + 0.12, y: state.pivot.y - 0.55 });
   pts.push({ x: state.pivot.x + 0.12, y: state.pivot.y + 0.35 });
+
+  if (state.showBody) {
+    const s = shoulderPos(state);
+    const a = anatomy(state.userHeight);
+    pts.push({ x: state.hipX, y: state.hipY });
+    pts.push({ x: state.hipX + 0.45, y: state.hipY - 0.05 }); // towards feet
+    pts.push({ x: s.x, y: s.y + a.head * 2 + a.neck });         // crown
+    pts.push({ x: state.hipX, y: 0 });                          // floor
+  }
 
   const n = 24;
   const tipPlateR = state.mode === "plate" ? PLATE_RADIUS_M : 0;
@@ -351,6 +368,110 @@ function drawRomArcs(ctx, T, state) {
   drawArc(rW, wTipOff);
 }
 
+// ---------- Bench + body ----------
+
+function rotateAroundCW(p, origin, angleRad) {
+  const dx = p.x - origin.x, dy = p.y - origin.y;
+  const c = Math.cos(angleRad), s = Math.sin(angleRad);
+  return { x: origin.x + dx * c + dy * s, y: origin.y - dx * s + dy * c };
+}
+
+function drawBench(ctx, T, state) {
+  const hip = { x: state.hipX, y: state.hipY };
+  const headEnd = { x: hip.x - 0.75, y: hip.y };
+  const footEnd = { x: hip.x + 0.40, y: hip.y };
+  const angleRad = state.benchAngle * Math.PI / 180;
+
+  const headRot = rotateAroundCW(headEnd, hip, angleRad);
+  const footRot = footEnd; // keep foot end at hipY for simplicity (typical adjustable bench)
+
+  const thickness = 0.08;
+  // pad polygon (top surface)
+  const up = { x: -Math.sin(angleRad), y: Math.cos(angleRad) };
+  const padTopHead = headRot;
+  const padTopFoot = footRot;
+  const padBotHead = { x: headRot.x - up.x * thickness, y: headRot.y - up.y * thickness };
+  const padBotFoot = { x: footRot.x, y: footRot.y - thickness };
+
+  ctx.fillStyle = COL.bench;
+  ctx.strokeStyle = COL.benchEdge;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const a = T.toPx(padTopHead), b = T.toPx(padTopFoot);
+  const c = T.toPx(padBotFoot), d = T.toPx(padBotHead);
+  ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+
+  // hip-pivot base block (support under bench)
+  ctx.fillStyle = COL.bench;
+  const basePx = T.toPx({ x: hip.x, y: state.hipY - thickness });
+  const baseW = T.toLen(0.12);
+  const baseH = T.toLen(state.hipY - thickness); // down to floor
+  ctx.fillRect(basePx.x - baseW / 2, basePx.y, baseW, baseH);
+
+  return {
+    headEnd: headRot,
+    padTopHead,
+    padTopFoot,
+  };
+}
+
+function drawBody(ctx, T, state, handlePoint) {
+  const a = anatomy(state.userHeight);
+  const hip = { x: state.hipX, y: state.hipY };
+  const shoulder = shoulderPos(state);
+
+  // torso line (hip → shoulder), rising along the bench
+  ctx.strokeStyle = COL.bodyLine;
+  ctx.lineCap = "round";
+  ctx.lineWidth = Math.max(5, T.toLen(0.09));
+  const hipPx = T.toPx(hip);
+  const shPx = T.toPx(shoulder);
+  ctx.beginPath();
+  ctx.moveTo(hipPx.x, hipPx.y);
+  ctx.lineTo(shPx.x, shPx.y);
+  ctx.stroke();
+
+  // head — positioned in the direction continuing along the torso from shoulder
+  const torsoUx = (shoulder.x - hip.x) / Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y);
+  const torsoUy = (shoulder.y - hip.y) / Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y);
+  const headCenter = {
+    x: shoulder.x + torsoUx * (a.neck + a.head),
+    y: shoulder.y + torsoUy * (a.neck + a.head),
+  };
+  const headPx = T.toPx(headCenter);
+  const rHead = Math.max(8, T.toLen(a.head));
+  ctx.fillStyle = COL.bodySkin;
+  ctx.strokeStyle = COL.bodyLine;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(headPx.x, headPx.y, rHead, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+
+  // arm via IK
+  const ik = solveArmIK(shoulder, handlePoint, a.upper, a.forearm);
+  const elbowPx = T.toPx(ik.elbow);
+  const handPx = T.toPx(ik.hand);
+  const color = ik.reachable ? COL.bodyLine : COL.bodyUnreachable;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(4, T.toLen(0.06));
+  ctx.beginPath();
+  ctx.moveTo(shPx.x, shPx.y);
+  ctx.lineTo(elbowPx.x, elbowPx.y);
+  ctx.lineTo(handPx.x, handPx.y);
+  ctx.stroke();
+
+  // shoulder + elbow joints
+  ctx.fillStyle = color;
+  [shPx, elbowPx, handPx].forEach((p) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, Math.max(3, T.toLen(0.02)), 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  return ik;
+}
+
 // ---------- Main ----------
 
 export function renderScene(canvas, state, currentTheta) {
@@ -362,6 +483,7 @@ export function renderScene(canvas, state, currentTheta) {
   const T = fitTransform(ctx, bounds);
 
   drawRack(ctx, T, state.pivot);
+  if (state.showBody) drawBench(ctx, T, state);
   drawRomArcs(ctx, T, state);
 
   // Ghost poses at ROM ends
@@ -389,6 +511,9 @@ export function renderScene(canvas, state, currentTheta) {
   }
 
   if (state.mode === "cable") drawCable(ctx, T, state, currentTheta);
+
+  // User body with arm connected to the handle at the current pose.
+  if (state.showBody) drawBody(ctx, T, state, handlePos(state, currentTheta));
 
   // Force arrow at the handle, on top of the arm but below the rack bracket.
   drawForceArrow(ctx, T, state, currentTheta);
