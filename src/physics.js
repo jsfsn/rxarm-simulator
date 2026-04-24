@@ -72,6 +72,15 @@ function plateTorque(state, theta) {
   return torqueAt(state, wp, 0, -state.plateKg * G);
 }
 
+// Plates loaded on the horn at the weight bracket (the attachment point
+// of the weight arm along the main arm). Always applied — independent of
+// plate-vs-cable mode at the weight-arm tip.
+function bracketPlateTorque(state, theta) {
+  if (!state.plateKgBracket) return 0;
+  const bp = weightBracketPos(state, theta);
+  return torqueAt(state, bp, 0, -state.plateKgBracket * G);
+}
+
 function cableTorque(state, theta) {
   const wp = weightPos(state, theta);
   const dx = state.pulley.x - wp.x;
@@ -98,6 +107,7 @@ export function forceAtHandle(state, theta) {
   let tauLoad = 0;
   if (state.mode === "plate") tauLoad += plateTorque(state, theta);
   else if (state.mode === "cable") tauLoad += cableTorque(state, theta);
+  tauLoad += bracketPlateTorque(state, theta);
   tauLoad += armSelfTorque(state, theta);
 
   const R = effectiveHandleRadius(state);

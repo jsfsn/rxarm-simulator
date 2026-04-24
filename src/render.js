@@ -75,17 +75,20 @@ function sceneBounds(state) {
   pts.push({ x: state.pivot.x + 0.12, y: state.pivot.y + 0.35 });
 
   const n = 24;
-  const plateR = state.mode === "plate" ? PLATE_RADIUS_M : 0;
+  const tipPlateR = state.mode === "plate" ? PLATE_RADIUS_M : 0;
+  const bktPlateR = state.plateKgBracket > 0 ? PLATE_RADIUS_M : 0;
   for (let i = 0; i <= n; i++) {
     const t = state.romStart + (i / n) * (state.romEnd - state.romStart);
     pts.push(handlePos(state, t));
     pts.push(handleBracketPos(state, t));
-    pts.push(weightBracketPos(state, t));
-    // include the plate disc footprint around the weight tip so plates
-    // don't get clipped at the scene bounds
+    // include the plate disc footprints around the weight tip and bracket
+    // so the stacked plates never get clipped at the scene edge
     const wt = weightPos(state, t);
-    pts.push({ x: wt.x + plateR, y: wt.y + plateR });
-    pts.push({ x: wt.x - plateR, y: wt.y - plateR });
+    const wb = weightBracketPos(state, t);
+    pts.push({ x: wt.x + tipPlateR, y: wt.y + tipPlateR });
+    pts.push({ x: wt.x - tipPlateR, y: wt.y - tipPlateR });
+    pts.push({ x: wb.x + bktPlateR, y: wb.y + bktPlateR });
+    pts.push({ x: wb.x - bktPlateR, y: wb.y - bktPlateR });
   }
   if (state.mode === "cable") {
     pts.push(state.pulley);
@@ -235,6 +238,19 @@ function drawHandleGrip(ctx, T, state, theta, tipPx) {
   disc(ctx, tipPx, Math.max(2.5, T.toLen(0.012)), COL.handleArm, COL.mainArmEdge, 1);
 }
 
+// Plates loaded on the horn at the weight bracket — rendered as a stack of
+// discs centred on the bracket position, behind the dial.
+function drawBracketPlates(ctx, T, bracketPx, kg) {
+  const nPlates = Math.max(1, Math.round(kg / 20));
+  const rOuter = Math.max(10, T.toLen(PLATE_RADIUS_M));
+  const rHole = Math.max(2, T.toLen(0.025));
+  for (let i = 0; i < nPlates; i++) {
+    const r = rOuter * (1 - i * 0.025);
+    disc(ctx, bracketPx, r, COL.plate, COL.plateRim, 1.5);
+  }
+  disc(ctx, bracketPx, rHole, COL.plateHub, COL.plateRim, 1);
+}
+
 function drawWeightPegAndPlates(ctx, T, state, theta, tipPx) {
   // The peg sticks out of the page; in the 2D side view it appears as a
   // short collinear stub at the tip, with stacked plates drawn as discs.
@@ -367,6 +383,11 @@ export function renderScene(canvas, state, currentTheta) {
 
   drawSubArmAndEnd(ctx, T, state, currentTheta, "weight", 1);
   drawSubArmAndEnd(ctx, T, state, currentTheta, "handle", 1);
+
+  // Plates loaded directly on the horn at the weight bracket.
+  if (state.plateKgBracket > 0) {
+    drawBracketPlates(ctx, T, weightBkPx, state.plateKgBracket);
+  }
 
   if (state.mode === "cable") drawCable(ctx, T, state, currentTheta);
 

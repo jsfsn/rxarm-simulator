@@ -20,6 +20,7 @@ const defaultState = () => ({
   lWeight: 0.18,
   aWeight: -60,     // default: peg angled down-and-back from the main arm
   plateKg: 40,
+  plateKgBracket: 0,
   stackKg: 40,
   cableMA: 1,
   pulley: { x: -0.9, y: 0.4 },
@@ -81,6 +82,7 @@ function formatVal(key, v) {
     case "currentAngle":
       return `${(+v).toFixed(0)}°`;
     case "plateKg":
+    case "plateKgBracket":
     case "stackKg":
     case "armMassKg":
       return `${(+v).toFixed(0)} kg`;
@@ -197,7 +199,7 @@ const SLIDER_IDS = [
   "lArm", "lWeightMount",
   "lHandle", "aHandle", "lWeight", "aWeight",
   "pivotY", "romStart", "romEnd", "currentAngle",
-  "plateKg", "stackKg", "cableMA",
+  "plateKg", "plateKgBracket", "stackKg", "cableMA",
   "pulleyX", "pulleyY", "armMassKg", "armComFrac",
 ];
 
