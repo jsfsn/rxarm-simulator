@@ -228,17 +228,13 @@ function armDir(state, theta, kind) {
 function perp(v) { return { x: -v.y, y: v.x }; }
 
 function drawHandleGrip(ctx, T, state, theta, tipPx) {
-  const d = armDir(state, theta, "handle");
-  const p = perp(d);
-  // canvas has both x and y flipped relative to world coords
-  const screenP = { x: -p.x, y: -p.y };
-  const half = T.toLen(0.11);
-  const a = { x: tipPx.x - screenP.x * half, y: tipPx.y - screenP.y * half };
-  const b = { x: tipPx.x + screenP.x * half, y: tipPx.y + screenP.y * half };
-  segment(ctx, a, b, Math.max(4, T.toLen(0.024)), COL.handleGrip, COL.mainArmEdge);
-  disc(ctx, a, Math.max(3, T.toLen(0.016)), COL.handleGrip, COL.mainArmEdge, 1);
-  disc(ctx, b, Math.max(3, T.toLen(0.016)), COL.handleGrip, COL.mainArmEdge, 1);
-  disc(ctx, tipPx, Math.max(2.5, T.toLen(0.012)), COL.handleArm, COL.mainArmEdge, 1);
+  // The handle on the real RX arms is a single cylindrical grip pointing out
+  // of the page (perpendicular to the 2D motion plane) — in side view it
+  // appears as a round knob at the tip of the handle arm.
+  const rOuter = Math.max(5, T.toLen(0.028));
+  const rInner = Math.max(3, T.toLen(0.018));
+  disc(ctx, tipPx, rOuter, COL.handleGrip, COL.mainArmEdge, 1.5);
+  disc(ctx, tipPx, rInner, COL.handleArm, COL.mainArmEdge, 1);
 }
 
 // Plates loaded on the horn at the weight bracket — rendered as a stack of
