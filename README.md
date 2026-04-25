@@ -17,6 +17,15 @@ python3 -m http.server 8000
 
 (Opening `index.html` via `file://` won't work because the JS uses ES modules.)
 
+## Test
+
+The project has a small Node test suite for the core geometry and torque
+invariants. It has no third-party dependencies.
+
+```sh
+npm test
+```
+
 ## Model
 
 The mechanism is a single rigid body rotating about the rack pivot:
@@ -47,14 +56,33 @@ weight tip      = bracket_w + L_w · (cos(θ + α_w),   sin(θ + α_w))
   toward a fixed pulley; direction changes with θ.
 - **Arm self-weight** — point mass at a fraction of `L_arm` along the main arm.
 
-User force is assumed tangential to the handle tip's motion circle around
-the pivot. The handle tip sits at a fixed geometric distance `R_h` from the
-pivot (law of cosines on the rigid body):
+User force is applied in the selected direction at the handle. For any unit
+force direction `F̂`, its effective handle lever is the scalar cross product:
+
+```
+R_eff = (r_handle × F̂)_z
+F_user = |τ_load / R_eff|
+```
+
+For near-singular geometries where `R_eff ≈ 0`, the UI caps the displayed
+force instead of letting the plot go infinite. If load torque is zero, required
+handle force remains zero even in a singular direction.
+
+In the default body-relative modes the effective lever is constant through the
+ROM, so the force direction changes magnitude but not curve shape:
+
+- **Tangent** — minimum force, `R_eff = R_h`
+- **Perpendicular to main arm** — `R_eff = L_arm + L_h · cos α_h`
+- **Perpendicular to handle arm** — `R_eff = L_arm · cos α_h + L_h`
+
+The tangent handle radius comes from the law of cosines:
 
 ```
 R_h = √( L_arm² + L_h² + 2·L_arm·L_h · cos α_h )
-F_user = |τ_load| / R_h
 ```
+
+World-fixed horizontal/vertical force directions use the same `R_eff` equation,
+but `R_eff` varies with `θ`, so they can reshape the force curve.
 
 Quasi-static — velocity and inertia ignored, which is fine for strength work.
 
@@ -80,7 +108,8 @@ idealised strength curve. For instance:
 - Quasi-static only; inertia and cable stretch are ignored
 - Plate CoM is modelled at the weight-arm tip; real horns offset the CoM
   slightly along the horn axis
-- User force is assumed tangential — reality depends on body position
+- User force direction is simplified — real force paths depend on grip,
+  shoulder position, and user intent
 - Cable doesn't check for self-intersection with the arm or rack
 
 Good enough for comparing geometries and picking plate loads; not a

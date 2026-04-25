@@ -37,7 +37,7 @@ export function shoulderPos(state) {
 export function solveArmIK(shoulder, hand, upperLen, forearmLen) {
   const dx = hand.x - shoulder.x;
   const dy = hand.y - shoulder.y;
-  const d0 = Math.hypot(dx, dy) || 1e-9;
+  const d0 = Math.hypot(dx, dy);
 
   const maxReach = upperLen + forearmLen;
   const minReach = Math.abs(upperLen - forearmLen);
@@ -46,8 +46,21 @@ export function solveArmIK(shoulder, hand, upperLen, forearmLen) {
   if (d0 > maxReach) { d = maxReach; reachable = false; }
   else if (d0 < minReach) { d = minReach; reachable = false; }
 
+  if (d < 1e-9) {
+    return {
+      elbow: { x: shoulder.x, y: shoulder.y - upperLen },
+      hand: { x: hand.x, y: hand.y },
+      reachable,
+      distance: d0,
+      maxReach,
+      minReach,
+      stretchPct: 0,
+    };
+  }
+
   // Unit vector along shoulder → hand, and its perpendicular.
-  const ux = dx / d0, uy = dy / d0;
+  const ux = d0 < 1e-9 ? 1 : dx / d0;
+  const uy = d0 < 1e-9 ? 0 : dy / d0;
   const vx = -uy, vy = ux; // CCW perpendicular
 
   // Distance along the line from shoulder to the elbow's projection.

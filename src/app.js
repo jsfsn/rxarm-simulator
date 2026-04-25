@@ -18,7 +18,7 @@ const defaultState = () => ({
   // Sub-arms extending from each bracket.
   lHandle: 0.29,    // ~half the main arm length, matches the real arm
   aHandle: 0,       // degrees: bracket rotation, 0 = inline with main arm
-  lWeight: 0.29,
+  lWeight: 0.45,
   aWeight: -60,     // default: peg angled down-and-back from the main arm
   plateKg: 40,
   plateKgBracket: 0,

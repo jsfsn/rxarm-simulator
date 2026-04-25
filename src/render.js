@@ -63,9 +63,11 @@ const COL = {
 function fitTransform(ctx, bounds) {
   const { width, height } = ctx.canvas;
   const pad = 28;
-  const w = bounds.maxX - bounds.minX;
-  const h = bounds.maxY - bounds.minY;
-  const scale = Math.min((width - 2 * pad) / w, (height - 2 * pad) / h);
+  const w = Math.max(1e-6, bounds.maxX - bounds.minX);
+  const h = Math.max(1e-6, bounds.maxY - bounds.minY);
+  const drawW = Math.max(1, width - 2 * pad);
+  const drawH = Math.max(1, height - 2 * pad);
+  const scale = Math.min(drawW / w, drawH / h);
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cy = (bounds.minY + bounds.maxY) / 2;
   return {
@@ -95,7 +97,7 @@ function sceneBounds(state) {
   }
 
   const n = 24;
-  const tipPlateR = state.mode === "plate" ? PLATE_RADIUS_M : 0;
+  const tipPlateR = state.mode === "plate" && state.plateKg > 0 ? PLATE_RADIUS_M : 0;
   const bktPlateR = state.plateKgBracket > 0 ? PLATE_RADIUS_M : 0;
   for (let i = 0; i <= n; i++) {
     const t = state.romStart + (i / n) * (state.romEnd - state.romStart);
@@ -242,7 +244,6 @@ function armDir(state, theta, kind) {
   const a = theta + (kind === "handle" ? state.aHandle : state.aWeight);
   return { x: Math.cos(a), y: Math.sin(a) };
 }
-function perp(v) { return { x: -v.y, y: v.x }; }
 
 function drawHandleGrip(ctx, T, state, theta, tipPx) {
   // The handle on the real RX arms is a single cylindrical grip pointing out
@@ -279,7 +280,8 @@ function drawWeightPegAndPlates(ctx, T, state, theta, tipPx) {
   };
   segment(ctx, tipPx, stubEnd, Math.max(4, T.toLen(0.022)), COL.plateHub, COL.mainArmEdge);
 
-  const kg = state.plateKg;
+  const kg = state.mode === "plate" ? state.plateKg : 0;
+  if (kg <= 0) return;
   const nPlates = Math.max(1, Math.round(kg / 20));
   const rOuter = Math.max(12, T.toLen(PLATE_RADIUS_M));
   const rHole = Math.max(2, T.toLen(0.025));
@@ -329,21 +331,24 @@ function drawCable(ctx, T, state, theta) {
 // ---------- ROM hints ----------
 
 function drawRomArcs(ctx, T, state) {
-  const pivotPx = T.toPx(state.pivot);
   ctx.strokeStyle = COL.ghost;
   ctx.lineWidth = 1.2;
 
   // Since the whole body is rigid, the handle tip traces a perfect circle
   // around the rack pivot with constant radius. Draw that arc.
   const drawArc = (worldR, thetaOffset = 0) => {
-    const r = T.toLen(worldR);
-    // canvas has both x and y flipped relative to world coords
-    const pA = { x: -Math.cos(state.romStart + thetaOffset), y: -Math.sin(state.romStart + thetaOffset) };
-    const pB = { x: -Math.cos(state.romEnd + thetaOffset), y: -Math.sin(state.romEnd + thetaOffset) };
-    const a0 = Math.atan2(pA.y, pA.x);
-    const a1 = Math.atan2(pB.y, pB.x);
+    const steps = Math.max(2, Math.ceil(Math.abs(state.romEnd - state.romStart) / (Math.PI / 48)));
     ctx.beginPath();
-    ctx.arc(pivotPx.x, pivotPx.y, r, Math.min(a0, a1), Math.max(a0, a1));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const theta = state.romStart + t * (state.romEnd - state.romStart) + thetaOffset;
+      const p = T.toPx({
+        x: state.pivot.x + worldR * Math.cos(theta),
+        y: state.pivot.y + worldR * Math.sin(theta),
+      });
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
     ctx.stroke();
   };
 

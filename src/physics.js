@@ -16,6 +16,9 @@
 // points along +x, grows CCW.
 
 const G = 9.80665;
+const MAX_HANDLE_FORCE_N = 100000;
+const MIN_EFFECTIVE_LEVER_M = 1e-3;
+const ZERO_TORQUE_NM = 1e-9;
 
 // --- Key points on the rigid body as functions of the main-arm angle θ ---
 
@@ -142,39 +145,44 @@ function armSelfTorque(state, theta) {
   return torqueAt(state, p, 0, -state.armMassKg * G);
 }
 
-// Magnitude of the force the user must apply at the handle (in whichever
-// direction `state.forceDir` selects) to hold the arm statically at θ.
-export function forceAtHandle(state, theta) {
+function loadTorque(state, theta) {
   let tauLoad = 0;
   if (state.mode === "plate") tauLoad += plateTorque(state, theta);
   else if (state.mode === "cable") tauLoad += cableTorque(state, theta);
   tauLoad += bracketPlateTorque(state, theta);
   tauLoad += armSelfTorque(state, theta);
+  return tauLoad;
+}
+
+function signedHandleForce(state, theta) {
+  const tauLoad = loadTorque(state, theta);
+  if (Math.abs(tauLoad) < ZERO_TORQUE_NM) return 0;
 
   const R = effectiveLever(state, theta);
-  // Near-singular geometries (e.g. world-horizontal push when the arm is
-  // exactly horizontal) would blow up to infinity. Cap at 100 000 N — clearly
-  // unphysical but keeps plots and stats finite so the rest of the sweep
-  // stays readable.
-  if (Math.abs(R) < 1e-3) return 1e5;
-  return Math.min(1e5, Math.abs(tauLoad / R));
+  // Near-singular geometries mean the chosen force direction cannot create
+  // the torque required to hold the load. Keep outputs finite for plotting,
+  // but do not invent force when there is no load torque.
+  if (Math.abs(R) < MIN_EFFECTIVE_LEVER_M) {
+    return -Math.sign(tauLoad || 1) * MAX_HANDLE_FORCE_N;
+  }
+
+  const F = -tauLoad / R;
+  return Math.max(-MAX_HANDLE_FORCE_N, Math.min(MAX_HANDLE_FORCE_N, F));
+}
+
+// Magnitude of the force the user must apply at the handle (in whichever
+// direction `state.forceDir` selects) to hold the arm statically at θ.
+export function forceAtHandle(state, theta) {
+  return Math.abs(signedHandleForce(state, theta));
 }
 
 // Like forceAtHandle, but returns the actual force vector applied at the
 // handle tip in equilibrium: magnitude and direction. Used for visualisation.
 export function forceVectorAtHandle(state, theta) {
-  let tauLoad = 0;
-  if (state.mode === "plate") tauLoad += plateTorque(state, theta);
-  else if (state.mode === "cable") tauLoad += cableTorque(state, theta);
-  tauLoad += bracketPlateTorque(state, theta);
-  tauLoad += armSelfTorque(state, theta);
-
-  const R = effectiveLever(state, theta);
   const f = forceDirVector(state, theta);
-  if (Math.abs(R) < 1e-6) return { fN: 0, dir: f };
-  // τ_user + τ_load = 0 → F · R = -τ_load → F = -τ_load / R.
+  // τ_user + τ_load = 0 -> F * R = -τ_load.
   // Negative F means the user actually pushes opposite to f̂.
-  const F = -tauLoad / R;
+  const F = signedHandleForce(state, theta);
   const fN = Math.abs(F);
   const dir = F >= 0 ? f : { x: -f.x, y: -f.y };
   return { fN, dir };
@@ -182,11 +190,12 @@ export function forceVectorAtHandle(state, theta) {
 
 // Sweep across the ROM.
 export function sweep(state, nSamples = 181) {
+  if (nSamples <= 0) return [];
   const { romStart, romEnd } = state;
   const out = new Array(nSamples);
   const h0 = handlePos(state, romStart).y;
   for (let i = 0; i < nSamples; i++) {
-    const t = i / (nSamples - 1);
+    const t = nSamples === 1 ? 0 : i / (nSamples - 1);
     const theta = romStart + t * (romEnd - romStart);
     const h = handlePos(state, theta);
     const fN = forceAtHandle(state, theta);
@@ -202,6 +211,7 @@ export function sweep(state, nSamples = 181) {
 }
 
 export function peakForce(samples) {
+  if (!samples.length) return { fN: 0, index: -1, sample: null };
   let peak = -Infinity;
   let idx = 0;
   for (let i = 0; i < samples.length; i++) {
@@ -211,6 +221,7 @@ export function peakForce(samples) {
 }
 
 export function minForce(samples) {
+  if (!samples.length) return { fN: 0, index: -1, sample: null };
   let lo = Infinity;
   let idx = 0;
   for (let i = 0; i < samples.length; i++) {

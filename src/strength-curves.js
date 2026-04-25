@@ -28,7 +28,7 @@ export function overlaySeries(name, samples) {
   for (const s of samples) if (s.fN > peak) peak = s.fN;
   const out = new Array(samples.length);
   for (let i = 0; i < samples.length; i++) {
-    const t = i / (samples.length - 1);
+    const t = samples.length === 1 ? 0 : i / (samples.length - 1);
     out[i] = { t, fN: curveValue(name, t) * peak };
   }
   return out;
