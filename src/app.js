@@ -6,13 +6,14 @@ import { renderPlot } from "./plot.js";
 const DEG = Math.PI / 180;
 const G = 9.80665;
 
-// Defaults sized to the RX Mini Arms: ~580 mm arm with handle + weight-arm
-// extensions, set up as a horizontal jammer press. Tune freely in the UI.
+// Defaults sized to the RX Arms product page: 579 mm arm depth, with handle
+// and force-curve/weight extensions set up as a horizontal jammer press.
+// Tune freely in the UI.
 const defaultState = () => ({
   mode: "plate",
   pivot: { x: 0, y: 1.3 },
   // Main arm: rack pivot → handle bracket at the far end.
-  lArm: 0.58,
+  lArm: 0.579,
   // Weight bracket position along the main arm (distance from pivot).
   lWeightMount: 0.29,
   // Sub-arms extending from each bracket.

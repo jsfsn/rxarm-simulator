@@ -4,12 +4,9 @@
 // Mechanism rendered:
 //   - narrow rack post with spaced holes
 //   - rack bracket at the pivot (where the main arm hinges)
-//   - main arm extending outward from the pivot
-//   - weight bracket (indexable dial) along the main arm, with its own
-//     short arm ending in a plate-loading peg and stacked plates
-//   - handle bracket (indexable dial) at the far end of the main arm,
-//     with its own short arm ending in a T-bar grip
-//   - optional cable from the weight-arm tip to a pulley + stack
+//   - black rectangular RX arm body with product-style indexed plates
+//   - handle extension and force-curve/weight horn as locked indexed arms
+//   - optional cable from the force-curve horn to a pulley + stack
 
 import {
   handlePos, weightPos, handleBracketPos, weightBracketPos,
@@ -23,21 +20,27 @@ const PLATE_RADIUS_M = 0.08;
 
 const COL = {
   bg: "#0f1115",
-  rack: "#3a4150",
+  rack: "#242936",
   rackEdge: "#596274",
   rackHole: "#0a0c10",
-  bracket: "#6a7384",
-  mainArm: "#c9d0dd",
-  mainArmEdge: "#7a8192",
-  dial: "#d8dee9",
-  dialRim: "#8a93a4",
-  dialTick: "#4a5161",
-  handleArm: "#ffd166",
-  handleGrip: "#ffe39a",
-  weightArm: "#ef476f",
+  bracket: "#4b5361",
+  mainArm: "#171a20",
+  mainArmEdge: "#596274",
+  armHighlight: "#2b3039",
+  dial: "#cfd3da",
+  dialRim: "#7b8491",
+  dialTick: "#222731",
+  handleArm: "#1d2128",
+  handleGrip: "#d7dce3",
+  weightArm: "#1d2128",
   plate: "#2a2f3a",
   plateRim: "#8e95a4",
-  plateHub: "#8a93a4",
+  plateHub: "#c2c8d0",
+  steel: "#c2c8d0",
+  steelEdge: "#737c89",
+  label: "#eef2f7",
+  labelText: "#2d333d",
+  loadAnchor: "#ef476f",
   cable: "#06d6a0",
   forceArrow: "#64b5ff",
   forceArrowHalo: "rgba(100, 181, 255, 0.25)",
@@ -154,22 +157,71 @@ function segment(ctx, a, b, width, fill, stroke) {
   }
 }
 
-function drawDial(ctx, center, rPx, strong) {
-  disc(ctx, center, rPx, COL.dial, COL.dialRim, strong ? 2 : 1.5);
-  // tick marks
-  ctx.strokeStyle = COL.dialTick;
-  ctx.lineWidth = 1;
-  const n = 12;
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2;
-    const a0 = { x: center.x + Math.cos(a) * rPx * 0.72, y: center.y + Math.sin(a) * rPx * 0.72 };
-    const a1 = { x: center.x + Math.cos(a) * rPx * 0.96, y: center.y + Math.sin(a) * rPx * 0.96 };
-    ctx.beginPath();
-    ctx.moveTo(a0.x, a0.y);
-    ctx.lineTo(a1.x, a1.y);
+function roundedRectPath(ctx, x, y, w, h, r) {
+  if (typeof ctx.roundRect === "function") {
+    ctx.roundRect(x, y, w, h, r);
+    return;
+  }
+
+  const rr = Math.min(r, Math.abs(w) * 0.5, Math.abs(h) * 0.5);
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+  ctx.lineTo(x + rr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+  ctx.lineTo(x, y + rr);
+  ctx.quadraticCurveTo(x, y, x + rr, y);
+}
+
+function worldTube(ctx, T, a, b, widthM, fill, stroke, alpha = 1) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-9) return;
+
+  const nx = (-dy / len) * widthM * 0.5;
+  const ny = (dx / len) * widthM * 0.5;
+  const pts = [
+    T.toPx({ x: a.x + nx, y: a.y + ny }),
+    T.toPx({ x: b.x + nx, y: b.y + ny }),
+    T.toPx({ x: b.x - nx, y: b.y - ny }),
+    T.toPx({ x: a.x - nx, y: a.y - ny }),
+  ];
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = Math.max(1, T.toLen(0.006));
     ctx.stroke();
   }
-  disc(ctx, center, Math.max(1.5, rPx * 0.08), COL.dialTick, null);
+  ctx.restore();
+}
+
+function drawDial(ctx, center, rPx, strong) {
+  disc(ctx, center, rPx, COL.dial, COL.dialRim, strong ? 2 : 1.5);
+
+  // Product-style adjustment holes around the indexing plate.
+  const n = 18;
+  const holeR = Math.max(1.8, rPx * 0.075);
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI * 0.9 + (i / (n - 1)) * Math.PI * 1.8;
+    const p = {
+      x: center.x + Math.cos(a) * rPx * 0.76,
+      y: center.y + Math.sin(a) * rPx * 0.76,
+    };
+    disc(ctx, p, holeR, COL.bg, COL.dialRim, Math.max(0.75, rPx * 0.012));
+  }
+  disc(ctx, center, rPx * 0.42, COL.mainArm, COL.dialRim, strong ? 2 : 1.5);
+  disc(ctx, center, Math.max(2.5, rPx * 0.16), COL.bg, COL.dialRim, 1);
 }
 
 // ---------- Rack ----------
@@ -208,51 +260,111 @@ function drawRackBracket(ctx, T, pivotPx) {
   ctx.fillStyle = COL.bracket;
   ctx.fillRect(pivotPx.x - bw * 0.5, pivotPx.y - bh * 0.5, bw, bh);
   // pivot bolt
-  disc(ctx, pivotPx, Math.max(3, T.toLen(0.018)), COL.dialTick, null);
+  disc(ctx, pivotPx, Math.max(5, T.toLen(0.026)), COL.steel, COL.steelEdge, 1.5);
+  disc(ctx, pivotPx, Math.max(2, T.toLen(0.012)), COL.dialTick, null);
 }
 
 // ---------- Main arm + sub-arms ----------
 
-function drawMainArm(ctx, T, state, theta, alpha = 1) {
-  const pivotPx = T.toPx(state.pivot);
-  const endPx = T.toPx(handleBracketPos(state, theta));
+function armUnit(theta) {
+  return { x: Math.cos(theta), y: Math.sin(theta) };
+}
 
+function offsetPoint(p, u, dist) {
+  return { x: p.x + u.x * dist, y: p.y + u.y * dist };
+}
+
+function drawMainArm(ctx, T, state, theta, alpha = 1) {
+  const u = armUnit(theta);
+  const a = offsetPoint(state.pivot, u, 0.035);
+  const b = offsetPoint(handleBracketPos(state, theta), u, -0.035);
+  worldTube(ctx, T, a, b, 0.075, COL.mainArm, COL.mainArmEdge, alpha);
+
+  // Subtle top highlight gives the black rectangular tube visible shape.
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.55;
+  segment(
+    ctx,
+    T.toPx(offsetPoint(a, { x: -u.y, y: u.x }, 0.024)),
+    T.toPx(offsetPoint(b, { x: -u.y, y: u.x }, 0.024)),
+    Math.max(1, T.toLen(0.006)),
+    COL.armHighlight,
+    null,
+  );
+  ctx.restore();
+
+  // Clevis/pivot end plate and a small product label on the tube.
+  const pivotPx = T.toPx(state.pivot);
+  ctx.save();
   ctx.globalAlpha = alpha;
-  const w = Math.max(6, T.toLen(0.045));
-  segment(ctx, pivotPx, endPx, w, COL.mainArm, COL.mainArmEdge);
-  ctx.globalAlpha = 1;
+  disc(ctx, pivotPx, Math.max(9, T.toLen(0.056)), COL.mainArm, COL.mainArmEdge, 2);
+  drawArmLabel(ctx, T, state, theta, alpha);
+  ctx.restore();
+}
+
+function drawArmLabel(ctx, T, state, theta, alpha) {
+  if (alpha < 0.9 || T.toLen(state.lArm) < 120) return;
+  const u = armUnit(theta);
+  const center = T.toPx(offsetPoint(state.pivot, u, state.lArm * 0.55));
+  const end = T.toPx(offsetPoint(state.pivot, u, state.lArm * 0.75));
+  const angle = Math.atan2(end.y - center.y, end.x - center.x);
+  const w = Math.max(46, T.toLen(0.17));
+  const h = Math.max(9, T.toLen(0.026));
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(center.x, center.y);
+  ctx.rotate(angle);
+  ctx.fillStyle = COL.label;
+  ctx.strokeStyle = COL.steelEdge;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  roundedRectPath(ctx, -w * 0.5, -h * 0.5, w, h, h * 0.28);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = COL.labelText;
+  ctx.font = `${Math.max(7, Math.min(12, h * 0.78))}px system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("PUSH N PULL", 0, 0.5);
+  ctx.restore();
 }
 
 function drawSubArmAndEnd(ctx, T, state, theta, kind, alpha = 1) {
-  const bracketPx = T.toPx(
-    kind === "handle" ? handleBracketPos(state, theta) : weightBracketPos(state, theta)
-  );
-  const tipPx = T.toPx(kind === "handle" ? handlePos(state, theta) : weightPos(state, theta));
+  const bracket = kind === "handle" ? handleBracketPos(state, theta) : weightBracketPos(state, theta);
+  const tip = kind === "handle" ? handlePos(state, theta) : weightPos(state, theta);
+  const bracketPx = T.toPx(bracket);
+  const tipPx = T.toPx(tip);
   const color = kind === "handle" ? COL.handleArm : COL.weightArm;
-  const w = Math.max(4, T.toLen(0.028));
 
-  ctx.globalAlpha = alpha;
-  segment(ctx, bracketPx, tipPx, w, color, COL.mainArmEdge);
+  worldTube(ctx, T, bracket, tip, 0.046, color, COL.mainArmEdge, alpha);
   if (alpha >= 1) {
     if (kind === "handle") drawHandleGrip(ctx, T, state, theta, tipPx);
     else drawWeightPegAndPlates(ctx, T, state, theta, tipPx);
   }
-  ctx.globalAlpha = 1;
-}
 
-function armDir(state, theta, kind) {
-  const a = theta + (kind === "handle" ? state.aHandle : state.aWeight);
-  return { x: Math.cos(a), y: Math.sin(a) };
+  // Visible spring-pin/locking knob on each indexed extension.
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  disc(ctx, bracketPx, Math.max(4, T.toLen(0.021)), COL.steel, COL.steelEdge, 1);
+  ctx.restore();
 }
 
 function drawHandleGrip(ctx, T, state, theta, tipPx) {
-  // The handle on the real RX arms is a single cylindrical grip pointing out
-  // of the page (perpendicular to the 2D motion plane) — in side view it
-  // appears as a round knob at the tip of the handle arm.
-  const rOuter = Math.max(5, T.toLen(0.028));
-  const rInner = Math.max(3, T.toLen(0.018));
-  disc(ctx, tipPx, rOuter, COL.handleGrip, COL.mainArmEdge, 1.5);
-  disc(ctx, tipPx, rInner, COL.handleArm, COL.mainArmEdge, 1);
+  drawCylindricalPeg(ctx, T, tipPx, 0.035, 0.16, COL.handleGrip, COL.steelEdge);
+  disc(ctx, tipPx, Math.max(4, T.toLen(0.02)), COL.handleArm, COL.mainArmEdge, 1);
+}
+
+function drawCylindricalPeg(ctx, T, basePx, radiusM, lengthM, fill, stroke) {
+  // Side-view approximation of an out-of-plane cylindrical handle/horn.
+  const r = Math.max(5, T.toLen(radiusM));
+  const len = Math.max(16, T.toLen(lengthM));
+  const dir = { x: -0.92, y: -0.18 };
+  const end = { x: basePx.x + dir.x * len, y: basePx.y + dir.y * len };
+
+  segment(ctx, basePx, end, r * 1.55, fill, stroke);
+  disc(ctx, end, r, fill, stroke, 1.5);
+  disc(ctx, end, r * 0.58, "rgba(255,255,255,0.12)", null);
 }
 
 // Plates loaded on the horn at the weight bracket — rendered as a stack of
@@ -269,16 +381,7 @@ function drawBracketPlates(ctx, T, bracketPx, kg) {
 }
 
 function drawWeightPegAndPlates(ctx, T, state, theta, tipPx) {
-  // The peg sticks out of the page; in the 2D side view it appears as a
-  // short collinear stub at the tip, with stacked plates drawn as discs.
-  const d = armDir(state, theta, "weight");
-  const screenDir = { x: -d.x, y: -d.y };
-  const stubLen = T.toLen(0.05);
-  const stubEnd = {
-    x: tipPx.x + screenDir.x * stubLen,
-    y: tipPx.y + screenDir.y * stubLen,
-  };
-  segment(ctx, tipPx, stubEnd, Math.max(4, T.toLen(0.022)), COL.plateHub, COL.mainArmEdge);
+  drawCylindricalPeg(ctx, T, tipPx, 0.026, 0.10, COL.plateHub, COL.mainArmEdge);
 
   const kg = state.mode === "plate" ? state.plateKg : 0;
   if (kg <= 0) return;
@@ -290,6 +393,46 @@ function drawWeightPegAndPlates(ctx, T, state, theta, tipPx) {
     disc(ctx, tipPx, r, COL.plate, COL.plateRim, 1.5);
   }
   disc(ctx, tipPx, rHole, COL.plateHub, COL.plateRim, 1);
+}
+
+function drawForceCurveGuide(ctx, T, state, theta) {
+  if (state.mode !== "cable") return;
+
+  const radiusM = Math.max(0.14, Math.min(0.32, state.lWeightMount + 0.08));
+  const start = theta - 0.42;
+  const end = theta + 0.95;
+  const steps = 20;
+
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.strokeStyle = COL.dialRim;
+  ctx.lineWidth = Math.max(6, T.toLen(0.03));
+  ctx.beginPath();
+  for (let i = 0; i <= steps; i++) {
+    const a = start + (i / steps) * (end - start);
+    const p = T.toPx({
+      x: state.pivot.x + radiusM * Math.cos(a),
+      y: state.pivot.y + radiusM * Math.sin(a),
+    });
+    if (i === 0) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
+  }
+  ctx.stroke();
+
+  ctx.globalAlpha = 0.9;
+  const n = 7;
+  for (let i = 0; i < n; i++) {
+    const a = start + (i / (n - 1)) * (end - start);
+    const p = T.toPx({
+      x: state.pivot.x + radiusM * Math.cos(a),
+      y: state.pivot.y + radiusM * Math.sin(a),
+    });
+    disc(ctx, p, Math.max(2.2, T.toLen(0.012)), COL.bg, COL.steelEdge, 1);
+  }
+
+  const anchor = T.toPx(weightBracketPos(state, theta));
+  disc(ctx, anchor, Math.max(4, T.toLen(0.018)), COL.loadAnchor, COL.steelEdge, 1.5);
+  ctx.restore();
 }
 
 // ---------- Cable ----------
@@ -490,6 +633,7 @@ export function renderScene(canvas, state, currentTheta) {
   drawRack(ctx, T, state.pivot);
   if (state.showBody) drawBench(ctx, T, state);
   drawRomArcs(ctx, T, state);
+  drawForceCurveGuide(ctx, T, state, currentTheta);
 
   // Ghost poses at ROM ends
   for (const theta of [state.romStart, state.romEnd]) {
