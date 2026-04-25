@@ -303,6 +303,7 @@ function initApp() {
   bindCheckbox("showBody", "showBody");
   $("#reset").addEventListener("click", resetAll);
   window.addEventListener("resize", resizeAll);
+  window.visualViewport?.addEventListener("resize", resizeAll);
   resizeAll();
 }
 

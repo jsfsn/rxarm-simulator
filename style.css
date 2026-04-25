@@ -39,8 +39,23 @@ main {
   min-height: 0;
 }
 @media (max-width: 900px) {
-  main { grid-template-columns: 1fr; }
-  .controls { max-height: 50vh; }
+  html, body {
+    height: auto;
+    min-height: 100%;
+  }
+  body {
+    min-height: 100dvh;
+    overflow-y: auto;
+  }
+  main {
+    display: block;
+    min-height: auto;
+  }
+  .controls {
+    max-height: none;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
 }
 
 .viewport {
@@ -60,6 +75,19 @@ main {
     grid-template-rows: 1fr 1fr auto;
   }
   .viewport > .stats { grid-column: 1; }
+}
+@media (max-width: 900px) {
+  .viewport {
+    grid-template-rows: minmax(360px, 58dvh) minmax(280px, 42dvh) auto;
+    min-height: auto;
+  }
+}
+@media (max-width: 700px) {
+  .viewport {
+    gap: 10px;
+    padding: 8px;
+    grid-template-rows: minmax(390px, 62dvh) minmax(260px, 44dvh) auto;
+  }
 }
 .canvas-wrap {
   position: relative;
@@ -114,7 +142,31 @@ canvas { display: block; width: 100%; height: 100%; }
   .stats { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 700px) {
-  .stats { grid-template-columns: repeat(2, 1fr); }
+  .stats {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+  .stats > div {
+    min-width: 142px;
+    scroll-snap-align: start;
+  }
+  .stats label {
+    font-size: 10px;
+    line-height: 1.2;
+  }
+  .stats span { font-size: 14px; }
+  .legend {
+    left: 8px;
+    right: 8px;
+    flex-wrap: wrap;
+    row-gap: 4px;
+    justify-content: center;
+    background: rgba(10,12,16,0.72);
+  }
 }
 
 .controls {
@@ -153,6 +205,34 @@ canvas { display: block; width: 100%; height: 100%; }
   width: 100%;
   margin: 4px 0 0;
   accent-color: var(--accent);
+}
+@media (max-width: 700px) {
+  header {
+    padding: 8px 12px;
+  }
+  header h1 {
+    font-size: 14px;
+  }
+  .subtitle {
+    font-size: 11px;
+  }
+  .controls {
+    padding: 8px;
+  }
+  .controls .group {
+    padding: 9px;
+    margin-bottom: 8px;
+  }
+  .controls label {
+    font-size: 13px;
+  }
+  .controls input[type=range] {
+    min-height: 28px;
+  }
+  .controls select,
+  button#reset {
+    min-height: 38px;
+  }
 }
 .controls select {
   width: 100%;
