@@ -201,6 +201,19 @@ canvas { display: block; width: 100%; height: 100%; }
   color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
+.controls .fixed-param {
+  color: var(--muted);
+}
+.controls .fixed-param span {
+  color: var(--muted);
+}
+.controls .fixed-param small {
+  display: block;
+  clear: both;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
 .controls input[type=range] {
   width: 100%;
   margin: 4px 0 0;

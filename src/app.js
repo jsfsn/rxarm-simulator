@@ -234,13 +234,22 @@ function redraw() {
 }
 
 const SLIDER_IDS = [
-  "lArm", "lWeightMount",
-  "lHandle", "aHandle", "lWeight", "aWeight",
+  "lArm",
+  "lHandle", "aHandle", "aWeight",
   "pivotY", "romStart", "romEnd", "currentAngle",
   "plateKg", "plateKgBracket", "stackKg", "cableMA",
   "pulleyX", "pulleyY", "armMassKg", "armComFrac",
   "userHeightCm", "benchAngle", "hipX", "hipY",
 ];
+
+const FIXED_READOUT_IDS = ["lWeightMount", "lWeight"];
+
+function syncFixedReadouts() {
+  FIXED_READOUT_IDS.forEach((id) => {
+    const out = $(`#${id}-val`);
+    if (out) out.textContent = formatVal(id, getStateVal(id));
+  });
+}
 
 let animReq = null;
 function toggleAnimation() {
@@ -272,6 +281,7 @@ function toggleAnimation() {
 
 function resetAll() {
   Object.assign(state, defaultState());
+  syncFixedReadouts();
   SLIDER_IDS.forEach((id) => {
     const el = $(`#${id}`);
     if (!el) return;
@@ -293,6 +303,7 @@ function resetAll() {
 }
 
 function initApp() {
+  syncFixedReadouts();
   SLIDER_IDS.forEach(bindSlider);
   bindRadio("mode", "mode");
   bindSelect("forceDir", "forceDir");
