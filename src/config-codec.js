@@ -1,4 +1,8 @@
-import { defaultVoltraPoints, normalizeVoltraPoints } from "./voltra-curve.js";
+import {
+  defaultVoltraPoints,
+  pointsForVoltraMode,
+  VOLTRA_CURVE_MODES,
+} from "./voltra-curve.js";
 
 const PREFIX = "rx1.";
 
@@ -65,7 +69,12 @@ export function extractConfigString(raw) {
 }
 
 export function encodeConfig(state) {
-  const points = normalizeVoltraPoints(state.voltraPoints, state.voltraMaxKgf)
+  const points = pointsForVoltraMode(
+    state.voltraCurveMode,
+    state.voltraPoints,
+    state.voltraMaxKgf,
+    state.voltraPointCount,
+  )
     .flatMap((p) => [q(p.t, 1000), q(p.fKgf, 10)]);
 
   const payload = [
@@ -101,6 +110,7 @@ export function encodeConfig(state) {
     q(state.hipX, 1000),
     q(state.hipY, 1000),
     points,
+    idx(VOLTRA_CURVE_MODES, state.voltraCurveMode),
   ];
 
   return `${PREFIX}${toBase64Url(JSON.stringify(payload))}`;
@@ -118,6 +128,7 @@ export function decodeConfig(raw) {
   }
 
   const voltraMaxKgf = clamp(dq(payload[13], 10, 150), 0, 300);
+  const voltraCurveMode = fromIdx(VOLTRA_CURVE_MODES, payload[32], "points");
   const encodedPoints = Array.isArray(payload[31]) ? payload[31] : [];
   const voltraPoints = [];
   for (let i = 0; i < encodedPoints.length - 1; i += 2) {
@@ -161,9 +172,12 @@ export function decodeConfig(raw) {
     benchAngle: clamp(dq(payload[28], 1, 0), 0, 90),
     hipX: clamp(dq(payload[29], 1000, 0.85), -2, 4),
     hipY: clamp(dq(payload[30], 1000, 0.5), 0, 2),
-    voltraPoints: normalizeVoltraPoints(
+    voltraCurveMode,
+    voltraPoints: pointsForVoltraMode(
+      voltraCurveMode,
       voltraPoints.length ? voltraPoints : defaultVoltraPoints(7, 40),
       voltraMaxKgf,
+      clamp(Math.round(dq(payload[14], 1, 7)), 6, 8),
     ),
   };
 }

@@ -15,6 +15,7 @@ const COL = {
   editor: "#64b5ff",
   editorFill: "#0f1115",
   editorLine: "rgba(100, 181, 255, 0.85)",
+  editorBadgeBg: "rgba(15, 17, 21, 0.82)",
 };
 
 function clamp(v, lo, hi) {
@@ -158,6 +159,59 @@ function formatX(v, unit) {
   return `${(v * 100).toFixed(0)} cm`;
 }
 
+function drawPointLabel(ctx, text, p, box, W) {
+  ctx.font = "11px system-ui, sans-serif";
+  const padX = 5;
+  const w = Math.ceil(ctx.measureText(text).width + padX * 2);
+  const h = 17;
+  const x = clamp(p.x - w * 0.5, box.L + 2, W - box.R - w - 2);
+  const y = Math.max(box.T + 2, p.y - 25);
+
+  ctx.fillStyle = COL.editorBadgeBg;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = COL.editor;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+  ctx.fillStyle = COL.editor;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x + w * 0.5, y + h * 0.5 + 0.5);
+  ctx.textBaseline = "alphabetic";
+}
+
+function drawOutputCurveLabels(ctx, xs, ys, xr, yr, box, W, H) {
+  if (xs.length < 2) return;
+  const n = 6;
+  const baseIndex = 0;
+  const base = Math.max(1e-9, ys[baseIndex]);
+
+  ctx.font = "11px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  for (let k = 0; k < n; k++) {
+    const i = Math.round((k / (n - 1)) * (xs.length - 1));
+    const p = xy({ x: xs[i], y: ys[i] }, xr, yr, box, W, H);
+    const pct = k === 0 ? 100 : (ys[i] / base) * 100;
+    const text = `${pct.toFixed(0)}%`;
+    const padX = 5;
+    const w = Math.ceil(ctx.measureText(text).width + padX * 2);
+    const h = 17;
+    const x = clamp(p.x - w * 0.5, box.L + 2, W - box.R - w - 2);
+    const y = Math.min(H - box.B - h - 2, p.y + 10);
+
+    ctx.fillStyle = "rgba(15, 17, 21, 0.78)";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = COL.force;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = COL.force;
+    ctx.fillText(text, x + w * 0.5, y + h * 0.5 + 0.5);
+  }
+
+  ctx.textBaseline = "alphabetic";
+}
+
 export function renderPlot(canvas, samples, opts) {
   const ctx = canvas.getContext("2d");
   const W = canvas.width, H = canvas.height;
@@ -234,6 +288,8 @@ export function renderPlot(canvas, samples, opts) {
   }
   ctx.stroke();
 
+  drawOutputCurveLabels(ctx, xs, ys, xr, yr, box, W, H);
+
   // current-angle marker
   if (opts.currentIndex != null && opts.currentIndex >= 0) {
     const i = opts.currentIndex;
@@ -271,6 +327,15 @@ export function renderPlot(canvas, samples, opts) {
       ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+    }
+
+    const baseForce = opts.voltraPoints[0]?.fKgf ?? 0;
+    for (const p of points) {
+      const fKgf = opts.voltraPoints[p.index]?.fKgf ?? 0;
+      const pct = p.index === 0 || baseForce <= 1e-9
+        ? 100
+        : (fKgf / baseForce) * 100;
+      drawPointLabel(ctx, `${pct.toFixed(0)}%`, p, box, W);
     }
   }
 

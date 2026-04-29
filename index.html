@@ -115,6 +115,13 @@
       <h3>Voltra 1 source curve</h3>
       <label>Max editable force <span id="voltraMaxKgf-val"></span>
         <input type="range" id="voltraMaxKgf" min="20" max="200" step="2.5" /></label>
+      <label>Curve mode
+        <select id="voltraCurveMode">
+          <option value="points">Freeform points</option>
+          <option value="ascending">Ascending linear</option>
+          <option value="descending">Descending linear</option>
+        </select>
+      </label>
       <label>Control points
         <select id="voltraPointCount">
           <option value="6">6 points</option>

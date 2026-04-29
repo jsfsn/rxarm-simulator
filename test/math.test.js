@@ -12,7 +12,9 @@ import {
 } from "../src/physics.js";
 import { overlaySeries } from "../src/strength-curves.js";
 import {
+  defaultVoltraLinearPoints,
   defaultVoltraPoints,
+  pointsForVoltraMode,
   resampleVoltraPoints,
   voltraForceKgfAt,
 } from "../src/voltra-curve.js";
@@ -42,6 +44,7 @@ function baseState() {
     stackKg: 0,
     cableMA: 1,
     voltraMaxKgf: 100,
+    voltraCurveMode: "points",
     voltraPointCount: 7,
     voltraPoints: defaultVoltraPoints(7, 40),
     pulley: { x: 0, y: 0 },
@@ -139,6 +142,34 @@ test("voltra curve interpolates and resamples editable points", () => {
   assertClose(resampled[4].fKgf, 20);
 });
 
+test("voltra linear curve modes keep endpoint-only ascending or descending curves", () => {
+  const ascending = pointsForVoltraMode(
+    "ascending",
+    [{ t: 0, fKgf: 70 }, { t: 0.5, fKgf: 10 }, { t: 1, fKgf: 40 }],
+    100,
+    7,
+  );
+  assert.equal(ascending.length, 2);
+  assertClose(ascending[0].t, 0);
+  assertClose(ascending[1].t, 1);
+  assertClose(ascending[0].fKgf, 70);
+  assertClose(ascending[1].fKgf, 70);
+
+  const descending = pointsForVoltraMode(
+    "descending",
+    [{ t: 0, fKgf: 40 }, { t: 1, fKgf: 80 }],
+    100,
+    7,
+  );
+  assert.equal(descending.length, 2);
+  assertClose(descending[0].fKgf, 40);
+  assertClose(descending[1].fKgf, 40);
+
+  const preset = defaultVoltraLinearPoints("descending", 120);
+  assert.equal(preset.length, 2);
+  assert.ok(preset[0].fKgf >= preset[1].fKgf);
+});
+
 test("voltra mode uses the programmed curve as cable source force", () => {
   const state = {
     ...baseState(),
@@ -187,14 +218,10 @@ test("config strings round-trip simulator UI state compactly", () => {
     stackKg: 37.5,
     cableMA: 1.7,
     voltraMaxKgf: 155,
+    voltraCurveMode: "descending",
     voltraPointCount: 7,
     voltraPoints: [
-      { t: 0, fKgf: 20 },
-      { t: 0.18, fKgf: 35.4 },
-      { t: 0.35, fKgf: 42.1 },
-      { t: 0.5, fKgf: 50 },
-      { t: 0.66, fKgf: 46.6 },
-      { t: 0.82, fKgf: 39.2 },
+      { t: 0, fKgf: 80 },
       { t: 1, fKgf: 30 },
     ],
     pulley: { x: -0.84, y: 0.52 },
@@ -228,8 +255,9 @@ test("config strings round-trip simulator UI state compactly", () => {
   assertClose(decoded.pulley.x, uiState.pulley.x);
   assertClose(decoded.pulley.y, uiState.pulley.y);
   assert.equal(decoded.overlay, uiState.overlay);
-  assert.equal(decoded.voltraPoints.length, uiState.voltraPoints.length);
-  assertClose(decoded.voltraPoints[1].t, uiState.voltraPoints[1].t);
+  assert.equal(decoded.voltraCurveMode, uiState.voltraCurveMode);
+  assert.equal(decoded.voltraPoints.length, 2);
+  assertClose(decoded.voltraPoints[0].fKgf, uiState.voltraPoints[0].fKgf);
   assertClose(decoded.voltraPoints[1].fKgf, uiState.voltraPoints[1].fKgf);
   assert.equal(
     extractConfigString(`https://example.test/#cfg=${encodeURIComponent(encoded)}`),

@@ -11,8 +11,10 @@ import { renderScene } from "./render.js";
 import { renderPlot } from "./plot.js";
 import { decodeConfig, encodeConfig } from "./config-codec.js";
 import {
+  defaultVoltraLinearPoints,
   defaultVoltraPoints,
   normalizeVoltraPoints,
+  pointsForVoltraMode,
   resampleVoltraPoints,
 } from "./voltra-curve.js";
 
@@ -39,6 +41,7 @@ const defaultState = () => ({
   stackKg: 40,
   cableMA: 1,
   voltraMaxKgf: 150,
+  voltraCurveMode: "points",
   voltraPointCount: 7,
   voltraPoints: defaultVoltraPoints(7, 40),
   pulley: { x: -0.9, y: 0.4 },
@@ -160,7 +163,12 @@ function setState(key, value) {
   else if (key === "userHeightCm") state.userHeight = value / 100;
   else if (key === "voltraMaxKgf") {
     state.voltraMaxKgf = value;
-    state.voltraPoints = normalizeVoltraPoints(state.voltraPoints, value);
+    state.voltraPoints = pointsForVoltraMode(
+      state.voltraCurveMode,
+      state.voltraPoints,
+      value,
+      state.voltraPointCount,
+    );
   }
   else state[key] = value;
 }
@@ -209,7 +217,9 @@ function syncAllControls() {
   $("#xAxis").value = state.xAxis;
   $("#unit").value = state.unit;
   $("#overlay").value = state.overlay;
+  $("#voltraCurveMode").value = state.voltraCurveMode;
   $("#voltraPointCount").value = String(state.voltraPointCount);
+  syncVoltraCurveControls();
   $("#animate").checked = state.animate;
   $("#showBody").checked = state.showBody;
   document.querySelectorAll(`input[name="mode"]`).forEach((el) => {
@@ -397,9 +407,11 @@ function updateVoltraPointFromEvent(ev) {
   const pts = state.voltraPoints.map((pt) => ({ ...pt }));
   const i = activeVoltraPoint;
   const minGap = 0.035;
+  const isLinear = state.voltraCurveMode === "ascending" || state.voltraCurveMode === "descending";
 
   let nextT = pts[i].t;
-  if (i === 0) nextT = 0;
+  if (isLinear) nextT = i === 0 ? 0 : 1;
+  else if (i === 0) nextT = 0;
   else if (i === pts.length - 1) nextT = 1;
   else {
     const lo = pts[i - 1].t + minGap;
@@ -407,11 +419,25 @@ function updateVoltraPointFromEvent(ev) {
     nextT = clamp(plotMeta.xToT(p.x), lo, hi);
   }
 
+  let fKgf = clamp(plotMeta.yToForceKgf(p.y), 0, state.voltraMaxKgf);
+  if (state.voltraCurveMode === "ascending") {
+    if (i === 0 && pts[1]) fKgf = Math.min(fKgf, pts[1].fKgf);
+    else if (i === 1 && pts[0]) fKgf = Math.max(fKgf, pts[0].fKgf);
+  } else if (state.voltraCurveMode === "descending") {
+    if (i === 0 && pts[1]) fKgf = Math.max(fKgf, pts[1].fKgf);
+    else if (i === 1 && pts[0]) fKgf = Math.min(fKgf, pts[0].fKgf);
+  }
+
   pts[i] = {
     t: nextT,
-    fKgf: clamp(plotMeta.yToForceKgf(p.y), 0, state.voltraMaxKgf),
+    fKgf,
   };
-  state.voltraPoints = normalizeVoltraPoints(pts, state.voltraMaxKgf);
+  state.voltraPoints = pointsForVoltraMode(
+    state.voltraCurveMode,
+    pts,
+    state.voltraMaxKgf,
+    state.voltraPointCount,
+  );
   redraw();
 }
 
@@ -456,6 +482,23 @@ function bindVoltraPlotEditor() {
 }
 
 function bindVoltraControls() {
+  const mode = $("#voltraCurveMode");
+  mode.value = state.voltraCurveMode;
+  mode.addEventListener("change", () => {
+    state.voltraCurveMode = mode.value;
+    if (state.voltraCurveMode === "points") {
+      state.voltraPoints = resampleVoltraPoints(
+        state.voltraPoints,
+        state.voltraPointCount,
+        state.voltraMaxKgf,
+      );
+    } else {
+      state.voltraPoints = defaultVoltraLinearPoints(state.voltraCurveMode, state.voltraMaxKgf);
+    }
+    syncVoltraCurveControls();
+    redraw();
+  });
+
   const count = $("#voltraPointCount");
   count.value = String(state.voltraPointCount);
   count.addEventListener("change", () => {
@@ -469,16 +512,37 @@ function bindVoltraControls() {
   });
 
   $("#voltraReset").addEventListener("click", () => {
-    state.voltraPoints = defaultVoltraPoints(state.voltraPointCount, state.stackKg);
+    state.voltraPoints = state.voltraCurveMode === "points"
+      ? defaultVoltraPoints(state.voltraPointCount, state.stackKg)
+      : defaultVoltraLinearPoints(state.voltraCurveMode, state.voltraMaxKgf);
     redraw();
   });
 
   $("#voltraFlat").addEventListener("click", () => {
     const pts = normalizeVoltraPoints(state.voltraPoints, state.voltraMaxKgf);
     const avg = pts.reduce((sum, p) => sum + p.fKgf, 0) / pts.length;
-    state.voltraPoints = defaultVoltraPoints(state.voltraPointCount, avg);
+    state.voltraPoints = state.voltraCurveMode === "points"
+      ? defaultVoltraPoints(state.voltraPointCount, avg)
+      : [{ t: 0, fKgf: avg }, { t: 1, fKgf: avg }];
     redraw();
   });
+
+  syncVoltraCurveControls();
+}
+
+function syncVoltraCurveControls() {
+  const isPoints = state.voltraCurveMode === "points";
+  const count = $("#voltraPointCount");
+  if (count) count.disabled = !isPoints;
+}
+
+function normalizeVoltraState() {
+  state.voltraPoints = pointsForVoltraMode(
+    state.voltraCurveMode,
+    state.voltraPoints,
+    state.voltraMaxKgf,
+    state.voltraPointCount,
+  );
 }
 
 function syncConfigString(force = false) {
@@ -538,6 +602,8 @@ function loadConfigFromLocation() {
 }
 
 function redraw() {
+  normalizeVoltraState();
+
   const ps = physicsState(state);
   const samples = sweep(ps, 181);
 
@@ -560,6 +626,7 @@ function redraw() {
     overlay: state.overlay,
     currentIndex: idx,
     editableVoltra: state.mode === "voltra",
+    voltraCurveMode: state.voltraCurveMode,
     voltraPoints: state.voltraPoints,
     voltraMaxKgf: state.voltraMaxKgf,
   });
