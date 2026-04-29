@@ -109,6 +109,11 @@ function makePlotMeta(box, xr, yr, W, H, xs, opts) {
     xToT: (px) => xValueToT(xValueAtPx(px)),
     yToForceKgf: (py) => {
       const yValue = yValueAtPx(py);
+      if (opts.voltraSourceScale) {
+        const maxKgf = Math.max(1e-9, opts.voltraSourceScale.maxKgf);
+        const visualPeak = Math.max(1e-9, opts.voltraSourceScale.visualPeak);
+        return (yValue / visualPeak) * maxKgf;
+      }
       return opts.unit === "kgf" ? yValue : yValue / 9.80665;
     },
   };
@@ -174,11 +179,15 @@ export function renderPlot(canvas, samples, opts) {
   const ys = samples.map((s) => (opts.unit === "kgf" ? s.fKgf : s.fN));
 
   const xr = niceRange(Math.min(...xs), Math.max(...xs));
-  const sourceValues = opts.editableVoltra && Array.isArray(opts.voltraPoints)
-    ? opts.voltraPoints.map((pt) => (opts.unit === "kgf" ? pt.fKgf : pt.fKgf * 9.80665))
-    : [];
-  const yMax = Math.max(...ys, ...sourceValues, 0);
+  const outputPeak = Math.max(...ys, 0);
+  const yMax = outputPeak;
   const yr = niceRange(0, yMax);
+  const voltraMax = Math.max(1e-9, opts.voltraMaxKgf ?? 1);
+  const voltraVisualPeak = Math.max(outputPeak, yr.hi * 0.82, 1);
+  const voltraSourceScale = opts.editableVoltra
+    ? { maxKgf: voltraMax, visualPeak: voltraVisualPeak }
+    : null;
+  opts.voltraSourceScale = voltraSourceScale;
   const meta = makePlotMeta(box, xr, yr, W, H, xs, opts);
 
   drawGrid(ctx, box, xr, yr, W, H, xUnit);
@@ -237,7 +246,7 @@ export function renderPlot(canvas, samples, opts) {
 
   if (opts.editableVoltra && Array.isArray(opts.voltraPoints)) {
     const points = opts.voltraPoints.map((pt, index) => {
-      const y = opts.unit === "kgf" ? pt.fKgf : pt.fKgf * 9.80665;
+      const y = (pt.fKgf / voltraMax) * voltraVisualPeak;
       const p = xy({ x: xAtT(xs, pt.t), y }, xr, yr, box, W, H);
       return { ...p, index, hitRadius: 18 };
     });

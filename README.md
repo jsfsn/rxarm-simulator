@@ -99,7 +99,8 @@ Quasi-static — velocity and inertia ignored, which is fine for strength work.
 
 - **Yellow line** — force the user must apply at the handle through the ROM
 - **Blue handles in Voltra mode** — draggable control points for the Voltra
-  source-force curve
+  source-force curve. They use their own normalised visual scale so the source
+  profile can be edited alongside the final handle-force curve.
 - **Scene handles** — draggable anchors for pivot height, current arm angle,
   handle/weight bracket rotation, cable/Voltra position, and bench placement
 - **Dashed green** — optional idealised strength curve (ascending, descending,

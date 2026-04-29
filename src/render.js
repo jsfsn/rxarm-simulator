@@ -126,7 +126,12 @@ function sceneBounds(state) {
   }
   if (state.mode === "cable" || state.mode === "voltra") {
     pts.push(state.pulley);
-    pts.push({ x: state.pulley.x, y: state.pulley.y - 1.0 });
+    if (state.mode === "cable") {
+      pts.push({ x: state.pulley.x, y: state.pulley.y - 1.0 });
+    } else {
+      pts.push({ x: state.pulley.x - 0.2, y: state.pulley.y - 0.2 });
+      pts.push({ x: state.pulley.x + 0.2, y: state.pulley.y + 0.2 });
+    }
   }
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -449,23 +454,24 @@ function drawForceCurveGuide(ctx, T, state, theta) {
 function drawCable(ctx, T, state, theta) {
   const weightTip = T.toPx(weightPos(state, theta));
   const pulleyPx = T.toPx(state.pulley);
+  const isVoltra = state.mode === "voltra";
 
   ctx.strokeStyle = COL.cable;
   ctx.lineWidth = Math.max(1.8, T.toLen(0.006));
   ctx.beginPath();
   ctx.moveTo(weightTip.x, weightTip.y);
   ctx.lineTo(pulleyPx.x, pulleyPx.y);
-  ctx.lineTo(pulleyPx.x, pulleyPx.y + T.toLen(0.9));
+  if (!isVoltra) ctx.lineTo(pulleyPx.x, pulleyPx.y + T.toLen(0.9));
   ctx.stroke();
+
+  if (isVoltra) {
+    drawVoltraUnit(ctx, T, pulleyPx);
+    return;
+  }
 
   const rHousing = Math.max(6, T.toLen(0.055));
   disc(ctx, pulleyPx, rHousing, COL.pulleyHousing, COL.pulleyRim, 1.5);
   disc(ctx, pulleyPx, rHousing * 0.55, COL.dial, COL.pulleyRim, 1);
-
-  if (state.mode === "voltra") {
-    drawVoltraUnit(ctx, T, pulleyPx);
-    return;
-  }
 
   const stackW = T.toLen(0.24);
   const stackH = T.toLen(0.5);
@@ -486,10 +492,10 @@ function drawCable(ctx, T, state, theta) {
 }
 
 function drawVoltraUnit(ctx, T, pulleyPx) {
-  const unitW = Math.max(44, T.toLen(0.22));
-  const unitH = Math.max(54, T.toLen(0.32));
+  const unitW = Math.max(36, T.toLen(0.18));
+  const unitH = Math.max(44, T.toLen(0.26));
   const x = pulleyPx.x - unitW * 0.5;
-  const y = pulleyPx.y + T.toLen(0.9);
+  const y = pulleyPx.y - unitH * 0.5;
   const r = Math.max(5, Math.min(9, unitW * 0.12));
 
   ctx.fillStyle = COL.voltra;
@@ -513,8 +519,10 @@ function drawVoltraUnit(ctx, T, pulleyPx) {
     ctx.font = `${Math.max(7, Math.min(11, unitW * 0.12))}px system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("VOLTRA 1", x + unitW * 0.5, y + unitH * 0.86);
+    ctx.fillText("VOLTRA 1", x + unitW * 0.5, y + unitH * 0.88);
   }
+
+  disc(ctx, pulleyPx, Math.max(4, Math.min(8, unitW * 0.12)), COL.bg, COL.voltraAccent, 2);
 }
 
 // ---------- ROM hints ----------
