@@ -12,7 +12,14 @@ const COL = {
   forceFill: "rgba(255,209,102,0.12)",
   overlay: "#06d6a0",
   marker: "#ef476f",
+  editor: "#64b5ff",
+  editorFill: "#0f1115",
+  editorLine: "rgba(100, 181, 255, 0.85)",
 };
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
 
 function niceRange(lo, hi) {
   if (hi - lo < 1e-9) hi = lo + 1;
@@ -57,6 +64,53 @@ function xy(p, xr, yr, box, W, H) {
   return {
     x: L + u * (W - L - R),
     y: H - B - v * (H - T - B),
+  };
+}
+
+function xAtT(xs, t) {
+  if (!xs.length) return 0;
+  if (xs.length === 1) return xs[0];
+  const pos = clamp(t, 0, 1) * (xs.length - 1);
+  const i = Math.min(xs.length - 2, Math.floor(pos));
+  const u = pos - i;
+  return xs[i] + (xs[i + 1] - xs[i]) * u;
+}
+
+function makePlotMeta(box, xr, yr, W, H, xs, opts) {
+  const { L, R, T, B } = box;
+  const plotW = W - L - R;
+  const plotH = H - T - B;
+  const xValueAtPx = (px) => xr.lo + ((px - L) / plotW) * (xr.hi - xr.lo);
+  const yValueAtPx = (py) => yr.lo + ((H - B - py) / plotH) * (yr.hi - yr.lo);
+
+  const xValueToT = (xv) => {
+    if (xs.length <= 1) return 0;
+    let bestT = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < xs.length - 1; i++) {
+      const a = xs[i];
+      const b = xs[i + 1];
+      const span = b - a;
+      const u = Math.abs(span) < 1e-12
+        ? 0
+        : clamp((xv - a) / span, 0, 1);
+      const xOnSegment = a + span * u;
+      const d = Math.abs(xOnSegment - xv);
+      if (d < bestD) {
+        bestD = d;
+        bestT = (i + u) / (xs.length - 1);
+      }
+    }
+    return clamp(bestT, 0, 1);
+  };
+
+  return {
+    controlPoints: [],
+    xToT: (px) => xValueToT(xValueAtPx(px)),
+    yToForceKgf: (py) => {
+      const yValue = yValueAtPx(py);
+      return opts.unit === "kgf" ? yValue : yValue / 9.80665;
+    },
   };
 }
 
@@ -108,14 +162,24 @@ export function renderPlot(canvas, samples, opts) {
 
   const box = drawAxes(ctx, W, H, xLabel, yLabel);
 
-  if (!samples.length) return;
+  if (!samples.length) {
+    return {
+      controlPoints: [],
+      xToT: () => 0,
+      yToForceKgf: () => 0,
+    };
+  }
 
   const xs = xSeries(samples, opts.xAxis);
   const ys = samples.map((s) => (opts.unit === "kgf" ? s.fKgf : s.fN));
 
   const xr = niceRange(Math.min(...xs), Math.max(...xs));
-  const yMax = Math.max(...ys, 0);
+  const sourceValues = opts.editableVoltra && Array.isArray(opts.voltraPoints)
+    ? opts.voltraPoints.map((pt) => (opts.unit === "kgf" ? pt.fKgf : pt.fKgf * 9.80665))
+    : [];
+  const yMax = Math.max(...ys, ...sourceValues, 0);
   const yr = niceRange(0, yMax);
+  const meta = makePlotMeta(box, xr, yr, W, H, xs, opts);
 
   drawGrid(ctx, box, xr, yr, W, H, xUnit);
 
@@ -170,4 +234,36 @@ export function renderPlot(canvas, samples, opts) {
     ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  if (opts.editableVoltra && Array.isArray(opts.voltraPoints)) {
+    const points = opts.voltraPoints.map((pt, index) => {
+      const y = opts.unit === "kgf" ? pt.fKgf : pt.fKgf * 9.80665;
+      const p = xy({ x: xAtT(xs, pt.t), y }, xr, yr, box, W, H);
+      return { ...p, index, hitRadius: 18 };
+    });
+    meta.controlPoints = points;
+
+    ctx.strokeStyle = COL.editorLine;
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    for (let i = 0; i < points.length; i++) {
+      if (i === 0) ctx.moveTo(points[i].x, points[i].y);
+      else ctx.lineTo(points[i].x, points[i].y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    for (const p of points) {
+      ctx.fillStyle = COL.editorFill;
+      ctx.strokeStyle = COL.editor;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  return meta;
 }

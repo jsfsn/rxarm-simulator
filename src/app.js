@@ -1,7 +1,19 @@
-import { sweep, peakForce, minForce, handlePos } from "./physics.js";
+import {
+  sweep,
+  peakForce,
+  minForce,
+  handlePos,
+  handleBracketPos,
+  weightBracketPos,
+} from "./physics.js";
 import { anatomy, shoulderPos, solveArmIK } from "./body.js";
 import { renderScene } from "./render.js";
 import { renderPlot } from "./plot.js";
+import {
+  defaultVoltraPoints,
+  normalizeVoltraPoints,
+  resampleVoltraPoints,
+} from "./voltra-curve.js";
 
 const DEG = Math.PI / 180;
 const G = 9.80665;
@@ -25,6 +37,9 @@ const defaultState = () => ({
   plateKgBracket: 0,
   stackKg: 40,
   cableMA: 1,
+  voltraMaxKgf: 150,
+  voltraPointCount: 7,
+  voltraPoints: defaultVoltraPoints(7, 40),
   pulley: { x: -0.9, y: 0.4 },
   armMassKg: 6,
   armComFrac: 0.45,
@@ -59,6 +74,28 @@ function physicsState(s) {
 const $ = (sel) => document.querySelector(sel);
 const sceneCanvas = $("#scene");
 const plotCanvas = $("#plot");
+let sceneMeta = null;
+let plotMeta = null;
+let activeSceneHandle = null;
+let activeVoltraPoint = null;
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+function normalizeDeg(deg) {
+  let out = ((deg + 180) % 360 + 360) % 360 - 180;
+  if (out === -180) out = 180;
+  return out;
+}
+
+function clampToInput(id, value) {
+  const el = $(`#${id}`);
+  if (!el) return value;
+  const min = Number.isFinite(+el.min) ? +el.min : -Infinity;
+  const max = Number.isFinite(+el.max) ? +el.max : Infinity;
+  return clamp(value, min, max);
+}
 
 // Match internal canvas resolution to the rendered size in device pixels.
 // The renderers work in device pixels directly — no dpr transform — so on
@@ -94,6 +131,7 @@ function formatVal(key, v) {
     case "plateKgBracket":
     case "stackKg":
     case "armMassKg":
+    case "voltraMaxKgf":
       return `${(+v).toFixed(0)} kg`;
     case "armComFrac":
       return (+v).toFixed(2);
@@ -119,6 +157,10 @@ function setState(key, value) {
   else if (key === "pulleyX") state.pulley.x = value;
   else if (key === "pulleyY") state.pulley.y = value;
   else if (key === "userHeightCm") state.userHeight = value / 100;
+  else if (key === "voltraMaxKgf") {
+    state.voltraMaxKgf = value;
+    state.voltraPoints = normalizeVoltraPoints(state.voltraPoints, value);
+  }
   else state[key] = value;
 }
 
@@ -142,6 +184,21 @@ function bindSlider(id) {
   el.value = getStateVal(id);
   el.addEventListener("input", sync);
   out.textContent = formatVal(id, getStateVal(id));
+}
+
+function syncControl(id) {
+  const el = $(`#${id}`);
+  if (!el) return;
+  const v = getStateVal(id);
+  el.value = v;
+  const out = $(`#${id}-val`);
+  if (out) out.textContent = formatVal(id, v);
+}
+
+function setControlValue(id, value) {
+  const next = clampToInput(id, value);
+  setState(id, next);
+  syncControl(id);
 }
 
 function bindRadio(name, key) {
@@ -175,15 +232,249 @@ function bindCheckbox(id, key, onChange) {
   });
 }
 
+function canvasPointFromEvent(canvas, ev) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (ev.clientX - rect.left) * (canvas.width / rect.width),
+    y: (ev.clientY - rect.top) * (canvas.height / rect.height),
+  };
+}
+
+function hitSceneHandle(p) {
+  if (!sceneMeta?.handles?.length) return null;
+  let best = null;
+  let bestD2 = Infinity;
+  for (const h of sceneMeta.handles) {
+    const dx = p.x - h.x;
+    const dy = p.y - h.y;
+    const d2 = dx * dx + dy * dy;
+    const r = h.hitRadius ?? 16;
+    if (d2 <= r * r && d2 < bestD2) {
+      best = h;
+      bestD2 = d2;
+    }
+  }
+  return best;
+}
+
+function angleDegFrom(anchor, p) {
+  return Math.atan2(p.y - anchor.y, p.x - anchor.x) / DEG;
+}
+
+function updateSceneHandleFromEvent(ev) {
+  if (!activeSceneHandle || !sceneMeta) return;
+
+  const screen = canvasPointFromEvent(sceneCanvas, ev);
+  const world = sceneMeta.screenToWorld(screen);
+  const ps = physicsState(state);
+  const theta = state.currentAngle * DEG;
+
+  switch (activeSceneHandle.id) {
+    case "pivotY":
+      setControlValue("pivotY", world.y);
+      break;
+
+    case "currentAngle": {
+      const deg = angleDegFrom(state.pivot, world);
+      setControlValue("currentAngle", deg);
+      break;
+    }
+
+    case "aHandle": {
+      if (state.lHandle <= 1e-6) break;
+      const anchor = handleBracketPos(ps, theta);
+      const deg = normalizeDeg(angleDegFrom(anchor, world) - state.currentAngle);
+      setControlValue("aHandle", deg);
+      break;
+    }
+
+    case "aWeight": {
+      if (state.lWeight <= 1e-6) break;
+      const anchor = weightBracketPos(ps, theta);
+      const deg = normalizeDeg(angleDegFrom(anchor, world) - state.currentAngle);
+      setControlValue("aWeight", deg);
+      break;
+    }
+
+    case "pulley":
+      setControlValue("pulleyX", world.x);
+      setControlValue("pulleyY", world.y);
+      break;
+
+    case "benchHip":
+      setControlValue("hipX", world.x);
+      setControlValue("hipY", world.y);
+      break;
+
+    case "benchAngle": {
+      const dx = world.x - state.hipX;
+      const dy = world.y - state.hipY;
+      const deg = Math.atan2(dy, -dx || 1e-9) / DEG;
+      setControlValue("benchAngle", deg);
+      break;
+    }
+
+    default:
+      break;
+  }
+
+  redraw();
+}
+
+function bindSceneEditor() {
+  sceneCanvas.addEventListener("pointerdown", (ev) => {
+    const hit = hitSceneHandle(canvasPointFromEvent(sceneCanvas, ev));
+    if (!hit) return;
+
+    ev.preventDefault();
+    activeSceneHandle = hit;
+    sceneCanvas.setPointerCapture(ev.pointerId);
+    sceneCanvas.style.cursor = "grabbing";
+    updateSceneHandleFromEvent(ev);
+  });
+
+  sceneCanvas.addEventListener("pointermove", (ev) => {
+    if (activeSceneHandle) {
+      ev.preventDefault();
+      updateSceneHandleFromEvent(ev);
+      return;
+    }
+
+    const hit = hitSceneHandle(canvasPointFromEvent(sceneCanvas, ev));
+    sceneCanvas.style.cursor = hit ? "grab" : "";
+  });
+
+  const endDrag = (ev) => {
+    if (!activeSceneHandle) return;
+    activeSceneHandle = null;
+    if (sceneCanvas.hasPointerCapture(ev.pointerId)) {
+      sceneCanvas.releasePointerCapture(ev.pointerId);
+    }
+    sceneCanvas.style.cursor = "";
+  };
+
+  sceneCanvas.addEventListener("pointerup", endDrag);
+  sceneCanvas.addEventListener("pointercancel", endDrag);
+}
+
+function hitVoltraPoint(p) {
+  if (!plotMeta?.controlPoints?.length) return null;
+  let best = null;
+  let bestD2 = Infinity;
+  for (const cp of plotMeta.controlPoints) {
+    const dx = p.x - cp.x;
+    const dy = p.y - cp.y;
+    const d2 = dx * dx + dy * dy;
+    const r = cp.hitRadius ?? 16;
+    if (d2 <= r * r && d2 < bestD2) {
+      best = cp;
+      bestD2 = d2;
+    }
+  }
+  return best;
+}
+
+function updateVoltraPointFromEvent(ev) {
+  if (state.mode !== "voltra" || activeVoltraPoint == null || !plotMeta) return;
+
+  const p = canvasPointFromEvent(plotCanvas, ev);
+  const pts = state.voltraPoints.map((pt) => ({ ...pt }));
+  const i = activeVoltraPoint;
+  const minGap = 0.035;
+
+  let nextT = pts[i].t;
+  if (i === 0) nextT = 0;
+  else if (i === pts.length - 1) nextT = 1;
+  else {
+    const lo = pts[i - 1].t + minGap;
+    const hi = pts[i + 1].t - minGap;
+    nextT = clamp(plotMeta.xToT(p.x), lo, hi);
+  }
+
+  pts[i] = {
+    t: nextT,
+    fKgf: clamp(plotMeta.yToForceKgf(p.y), 0, state.voltraMaxKgf),
+  };
+  state.voltraPoints = normalizeVoltraPoints(pts, state.voltraMaxKgf);
+  redraw();
+}
+
+function bindVoltraPlotEditor() {
+  plotCanvas.addEventListener("pointerdown", (ev) => {
+    if (state.mode !== "voltra") return;
+    const hit = hitVoltraPoint(canvasPointFromEvent(plotCanvas, ev));
+    if (!hit) return;
+
+    ev.preventDefault();
+    activeVoltraPoint = hit.index;
+    plotCanvas.setPointerCapture(ev.pointerId);
+    plotCanvas.style.cursor = "grabbing";
+    updateVoltraPointFromEvent(ev);
+  });
+
+  plotCanvas.addEventListener("pointermove", (ev) => {
+    if (activeVoltraPoint != null) {
+      ev.preventDefault();
+      updateVoltraPointFromEvent(ev);
+      return;
+    }
+
+    if (state.mode !== "voltra") {
+      plotCanvas.style.cursor = "";
+      return;
+    }
+    const hit = hitVoltraPoint(canvasPointFromEvent(plotCanvas, ev));
+    plotCanvas.style.cursor = hit ? "grab" : "crosshair";
+  });
+
+  const endDrag = (ev) => {
+    if (activeVoltraPoint == null) return;
+    activeVoltraPoint = null;
+    if (plotCanvas.hasPointerCapture(ev.pointerId)) {
+      plotCanvas.releasePointerCapture(ev.pointerId);
+    }
+    plotCanvas.style.cursor = state.mode === "voltra" ? "crosshair" : "";
+  };
+  plotCanvas.addEventListener("pointerup", endDrag);
+  plotCanvas.addEventListener("pointercancel", endDrag);
+}
+
+function bindVoltraControls() {
+  const count = $("#voltraPointCount");
+  count.value = String(state.voltraPointCount);
+  count.addEventListener("change", () => {
+    state.voltraPointCount = +count.value;
+    state.voltraPoints = resampleVoltraPoints(
+      state.voltraPoints,
+      state.voltraPointCount,
+      state.voltraMaxKgf,
+    );
+    redraw();
+  });
+
+  $("#voltraReset").addEventListener("click", () => {
+    state.voltraPoints = defaultVoltraPoints(state.voltraPointCount, state.stackKg);
+    redraw();
+  });
+
+  $("#voltraFlat").addEventListener("click", () => {
+    const pts = normalizeVoltraPoints(state.voltraPoints, state.voltraMaxKgf);
+    const avg = pts.reduce((sum, p) => sum + p.fKgf, 0) / pts.length;
+    state.voltraPoints = defaultVoltraPoints(state.voltraPointCount, avg);
+    redraw();
+  });
+}
+
 function redraw() {
   const ps = physicsState(state);
   const samples = sweep(ps, 181);
 
   document.body.classList.toggle("mode-plate", state.mode === "plate");
   document.body.classList.toggle("mode-cable", state.mode === "cable");
+  document.body.classList.toggle("mode-voltra", state.mode === "voltra");
 
   const currentTheta = state.currentAngle * DEG;
-  renderScene(sceneCanvas, ps, currentTheta);
+  sceneMeta = renderScene(sceneCanvas, ps, currentTheta);
 
   const span = state.romEnd - state.romStart;
   const rawIdx = span !== 0
@@ -191,11 +482,14 @@ function redraw() {
     : 0;
   const idx = Math.max(0, Math.min(samples.length - 1, rawIdx));
 
-  renderPlot(plotCanvas, samples, {
+  plotMeta = renderPlot(plotCanvas, samples, {
     xAxis: state.xAxis,
     unit: state.unit,
     overlay: state.overlay,
     currentIndex: idx,
+    editableVoltra: state.mode === "voltra",
+    voltraPoints: state.voltraPoints,
+    voltraMaxKgf: state.voltraMaxKgf,
   });
 
   const peak = peakForce(samples);
@@ -238,6 +532,7 @@ const SLIDER_IDS = [
   "lHandle", "aHandle", "aWeight",
   "pivotY", "romStart", "romEnd", "currentAngle",
   "plateKg", "plateKgBracket", "stackKg", "cableMA",
+  "voltraMaxKgf",
   "pulleyX", "pulleyY", "armMassKg", "armComFrac",
   "userHeightCm", "benchAngle", "hipX", "hipY",
 ];
@@ -294,6 +589,7 @@ function resetAll() {
   $("#xAxis").value = state.xAxis;
   $("#unit").value = state.unit;
   $("#overlay").value = state.overlay;
+  $("#voltraPointCount").value = String(state.voltraPointCount);
   $("#animate").checked = state.animate;
   $("#showBody").checked = state.showBody;
   document.querySelectorAll(`input[name="mode"]`).forEach((el) => {
@@ -312,6 +608,9 @@ function initApp() {
   bindSelect("overlay", "overlay");
   bindCheckbox("animate", "animate", toggleAnimation);
   bindCheckbox("showBody", "showBody");
+  bindSceneEditor();
+  bindVoltraControls();
+  bindVoltraPlotEditor();
   $("#reset").addEventListener("click", resetAll);
   window.addEventListener("resize", resizeAll);
   window.visualViewport?.addEventListener("resize", resizeAll);

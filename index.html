@@ -9,7 +9,7 @@
 <body class="mode-plate">
 <header>
   <h1>RX Mini Arms — Force Curve Simulator</h1>
-  <div class="subtitle">2D model · plate or cable load · push-n-pull mini arms</div>
+  <div class="subtitle">2D model · plate, cable, or programmable Voltra load · push-n-pull mini arms</div>
 </header>
 
 <main>
@@ -42,6 +42,7 @@
       <h3>Load mode</h3>
       <label class="radio"><input type="radio" name="mode" value="plate" /> Plate-loaded</label>
       <label class="radio"><input type="radio" name="mode" value="cable" /> Cable stack</label>
+      <label class="radio"><input type="radio" name="mode" value="voltra" /> Voltra 1</label>
     </div>
 
     <div class="group">
@@ -82,16 +83,37 @@
         <input type="range" id="plateKgBracket" min="0" max="200" step="2.5" /></label>
     </div>
 
-    <div class="group cable-only">
+    <div class="group stack-only">
       <h3>Cable stack</h3>
       <label>Stack weight <span id="stackKg-val"></span>
         <input type="range" id="stackKg" min="0" max="150" step="2.5" /></label>
       <label>Mechanical advantage <span id="cableMA-val"></span>
         <input type="range" id="cableMA" min="0.5" max="4" step="0.1" /></label>
+    </div>
+
+    <div class="group cable-path-only">
+      <h3>Cable path</h3>
       <label>Pulley X <span id="pulleyX-val"></span>
         <input type="range" id="pulleyX" min="-2" max="2" step="0.02" /></label>
       <label>Pulley Y <span id="pulleyY-val"></span>
         <input type="range" id="pulleyY" min="-0.5" max="2.5" step="0.02" /></label>
+    </div>
+
+    <div class="group voltra-only">
+      <h3>Voltra 1 source curve</h3>
+      <label>Max editable force <span id="voltraMaxKgf-val"></span>
+        <input type="range" id="voltraMaxKgf" min="20" max="200" step="2.5" /></label>
+      <label>Control points
+        <select id="voltraPointCount">
+          <option value="6">6 points</option>
+          <option value="7">7 points</option>
+          <option value="8">8 points</option>
+        </select>
+      </label>
+      <div class="button-row">
+        <button type="button" id="voltraFlat">Flatten</button>
+        <button type="button" id="voltraReset">Match stack</button>
+      </div>
     </div>
 
     <div class="group">

@@ -15,6 +15,8 @@
 // World: x-right, y-UP, metres, radians. θ (the main-arm rotation) = 0
 // points along +x, grows CCW.
 
+import { voltraForceNAt } from "./voltra-curve.js";
+
 const G = 9.80665;
 const MAX_HANDLE_FORCE_N = 100000;
 const MIN_EFFECTIVE_LEVER_M = 1e-3;
@@ -125,13 +127,21 @@ function bracketPlateTorque(state, theta) {
   return torqueAt(state, bp, 0, -state.plateKgBracket * G);
 }
 
-function cableTorque(state, theta) {
+function cableTorqueWithTension(state, theta, tensionN) {
   const wp = weightPos(state, theta);
   const dx = state.pulley.x - wp.x;
   const dy = state.pulley.y - wp.y;
   const len = Math.hypot(dx, dy) || 1;
-  const T = state.stackKg * G * (state.cableMA ?? 1);
+  const T = tensionN * (state.cableMA ?? 1);
   return torqueAt(state, wp, (T * dx) / len, (T * dy) / len);
+}
+
+function cableTorque(state, theta) {
+  return cableTorqueWithTension(state, theta, state.stackKg * G);
+}
+
+function voltraTorque(state, theta) {
+  return cableTorqueWithTension(state, theta, voltraForceNAt(state, theta));
 }
 
 // Arm self-weight: point mass at a fraction of the main arm length.
@@ -149,6 +159,7 @@ function loadTorque(state, theta) {
   let tauLoad = 0;
   if (state.mode === "plate") tauLoad += plateTorque(state, theta);
   else if (state.mode === "cable") tauLoad += cableTorque(state, theta);
+  else if (state.mode === "voltra") tauLoad += voltraTorque(state, theta);
   tauLoad += bracketPlateTorque(state, theta);
   tauLoad += armSelfTorque(state, theta);
   return tauLoad;

@@ -2,8 +2,8 @@
 
 A 2D quasi-static simulator for the [push-n-pull RX Mini Arms](https://push-n-pull.de/en/products/mini-arms).
 Model a pivoting lever arm with independent handle and weight extensions, load it
-either with plates on the weight horn or with a cable-stack pulling through a
-pulley, and plot the resulting force at the handle across the range of motion.
+with plates, a cable-stack, or a programmable Voltra-style cable source, and
+plot the resulting force at the handle across the range of motion.
 
 ## Run
 
@@ -54,6 +54,9 @@ weight tip      = bracket_w + L_w · (cos(θ + α_w),   sin(θ + α_w))
   `τ_plate = -m_plate · g · (x_weight_tip - x_pivot)`
 - **Cable mode** — tension `T = m_stack · g · MA` pulling the weight tip
   toward a fixed pulley; direction changes with θ.
+- **Voltra 1 mode** — idealised programmable cable-force source. The editable
+  control points define the pulling force from the Voltra; the machine geometry
+  then transforms that variable source force into the plotted handle force.
 - **Arm self-weight** — point mass at a fraction of `L_arm` along the main arm.
 
 User force is applied in the selected direction at the handle. For any unit
@@ -89,6 +92,10 @@ Quasi-static — velocity and inertia ignored, which is fine for strength work.
 ## What the plot shows
 
 - **Yellow line** — force the user must apply at the handle through the ROM
+- **Blue handles in Voltra mode** — draggable control points for the Voltra
+  source-force curve
+- **Scene handles** — draggable anchors for pivot height, current arm angle,
+  handle/weight bracket rotation, cable/Voltra position, and bench placement
 - **Dashed green** — optional idealised strength curve (ascending, descending,
   bell, flat), scaled to the force peak so the *shape* can be compared
 - **X axis toggle** — arm angle (degrees) or handle vertical displacement (cm)

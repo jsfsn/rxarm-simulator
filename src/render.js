@@ -6,7 +6,7 @@
 //   - rack bracket at the pivot (where the main arm hinges)
 //   - black rectangular RX arm body with product-style indexed plates
 //   - handle extension and force-curve/weight horn as locked indexed arms
-//   - optional cable from the force-curve horn to a pulley + stack
+//   - optional cable from the force-curve horn to a pulley + stack/Voltra
 
 import {
   handlePos, weightPos, handleBracketPos, weightBracketPos,
@@ -55,6 +55,11 @@ const COL = {
   pulleyRim: "#8a93a4",
   stack: "#262b36",
   stackRim: "#6a7384",
+  voltra: "#202632",
+  voltraAccent: "#64b5ff",
+  dragHandle: "#64b5ff",
+  dragHandleFill: "#0f1115",
+  dragHandleAlt: "#ffd166",
   ghost: "rgba(224,230,241,0.14)",
 };
 
@@ -78,6 +83,10 @@ function fitTransform(ctx, bounds) {
     toPx: (p) => ({
       x: width / 2 - (p.x - cx) * scale,
       y: height / 2 - (p.y - cy) * scale,
+    }),
+    toWorld: (p) => ({
+      x: cx - (p.x - width / 2) / scale,
+      y: cy - (p.y - height / 2) / scale,
     }),
     toLen: (m) => m * scale,
   };
@@ -115,7 +124,7 @@ function sceneBounds(state) {
     pts.push({ x: wb.x + bktPlateR, y: wb.y + bktPlateR });
     pts.push({ x: wb.x - bktPlateR, y: wb.y - bktPlateR });
   }
-  if (state.mode === "cable") {
+  if (state.mode === "cable" || state.mode === "voltra") {
     pts.push(state.pulley);
     pts.push({ x: state.pulley.x, y: state.pulley.y - 1.0 });
   }
@@ -396,7 +405,7 @@ function drawWeightPegAndPlates(ctx, T, state, theta, tipPx) {
 }
 
 function drawForceCurveGuide(ctx, T, state, theta) {
-  if (state.mode !== "cable") return;
+  if (state.mode !== "cable" && state.mode !== "voltra") return;
 
   const radiusM = Math.max(0.14, Math.min(0.32, state.lWeightMount + 0.08));
   const start = theta - 0.42;
@@ -453,6 +462,11 @@ function drawCable(ctx, T, state, theta) {
   disc(ctx, pulleyPx, rHousing, COL.pulleyHousing, COL.pulleyRim, 1.5);
   disc(ctx, pulleyPx, rHousing * 0.55, COL.dial, COL.pulleyRim, 1);
 
+  if (state.mode === "voltra") {
+    drawVoltraUnit(ctx, T, pulleyPx);
+    return;
+  }
+
   const stackW = T.toLen(0.24);
   const stackH = T.toLen(0.5);
   const sx = pulleyPx.x - stackW * 0.5;
@@ -468,6 +482,38 @@ function drawCable(ctx, T, state, theta) {
     ctx.moveTo(sx, y);
     ctx.lineTo(sx + stackW, y);
     ctx.stroke();
+  }
+}
+
+function drawVoltraUnit(ctx, T, pulleyPx) {
+  const unitW = Math.max(44, T.toLen(0.22));
+  const unitH = Math.max(54, T.toLen(0.32));
+  const x = pulleyPx.x - unitW * 0.5;
+  const y = pulleyPx.y + T.toLen(0.9);
+  const r = Math.max(5, Math.min(9, unitW * 0.12));
+
+  ctx.fillStyle = COL.voltra;
+  ctx.strokeStyle = COL.stackRim;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  roundedRectPath(ctx, x, y, unitW, unitH, r);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = COL.voltraAccent;
+  ctx.lineWidth = Math.max(2, unitW * 0.05);
+  ctx.beginPath();
+  ctx.moveTo(x + unitW * 0.22, y + unitH * 0.28);
+  ctx.lineTo(x + unitW * 0.5, y + unitH * 0.72);
+  ctx.lineTo(x + unitW * 0.78, y + unitH * 0.28);
+  ctx.stroke();
+
+  if (unitW >= 64) {
+    ctx.fillStyle = COL.label;
+    ctx.font = `${Math.max(7, Math.min(11, unitW * 0.12))}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("VOLTRA 1", x + unitW * 0.5, y + unitH * 0.86);
   }
 }
 
@@ -564,6 +610,16 @@ function drawBench(ctx, T, state) {
   };
 }
 
+function benchHandlePoints(state) {
+  const hip = { x: state.hipX, y: state.hipY };
+  const headEnd = { x: hip.x - 0.75, y: hip.y };
+  const angleRad = state.benchAngle * Math.PI / 180;
+  return {
+    hip,
+    headEnd: rotateAroundCW(headEnd, hip, angleRad),
+  };
+}
+
 function drawBody(ctx, T, state, handlePoint) {
   const a = anatomy(state.userHeight);
   const hip = { x: state.hipX, y: state.hipY };
@@ -620,6 +676,83 @@ function drawBody(ctx, T, state, handlePoint) {
   return ik;
 }
 
+// ---------- Interaction handles ----------
+
+function makeSceneHandles(T, state, currentTheta) {
+  const handles = [
+    { id: "pivotY", kind: "pivot", world: state.pivot, hitRadius: 18 },
+    {
+      id: "currentAngle",
+      kind: "angle",
+      world: handleBracketPos(state, currentTheta),
+      hitRadius: 18,
+    },
+    {
+      id: "aHandle",
+      kind: "subArm",
+      world: handlePos(state, currentTheta),
+      anchor: handleBracketPos(state, currentTheta),
+      hitRadius: 18,
+    },
+    {
+      id: "aWeight",
+      kind: "subArm",
+      world: weightPos(state, currentTheta),
+      anchor: weightBracketPos(state, currentTheta),
+      hitRadius: 18,
+    },
+  ];
+
+  if (state.mode === "cable" || state.mode === "voltra") {
+    handles.push({
+      id: "pulley",
+      kind: "point",
+      world: state.pulley,
+      hitRadius: 18,
+    });
+  }
+
+  if (state.showBody) {
+    const bench = benchHandlePoints(state);
+    handles.push(
+      { id: "benchHip", kind: "point", world: bench.hip, hitRadius: 18 },
+      { id: "benchAngle", kind: "angle", world: bench.headEnd, anchor: bench.hip, hitRadius: 18 },
+    );
+  }
+
+  return handles.map((h) => {
+    const screen = T.toPx(h.world);
+    const anchor = h.anchor ? T.toPx(h.anchor) : null;
+    return { ...h, ...screen, anchor };
+  });
+}
+
+function drawSceneHandles(ctx, handles) {
+  for (const h of handles) {
+    if (h.anchor) {
+      ctx.strokeStyle = h.id === "benchAngle" ? COL.bodyGhost : "rgba(100, 181, 255, 0.28)";
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(h.anchor.x, h.anchor.y);
+      ctx.lineTo(h.x, h.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  for (const h of handles) {
+    const r = h.kind === "pivot" ? 7 : 6;
+    ctx.fillStyle = COL.dragHandleFill;
+    ctx.strokeStyle = h.id === "benchAngle" || h.id === "benchHip" ? COL.dragHandleAlt : COL.dragHandle;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(h.x, h.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
 // ---------- Main ----------
 
 export function renderScene(canvas, state, currentTheta) {
@@ -659,7 +792,7 @@ export function renderScene(canvas, state, currentTheta) {
     drawBracketPlates(ctx, T, weightBkPx, state.plateKgBracket);
   }
 
-  if (state.mode === "cable") drawCable(ctx, T, state, currentTheta);
+  if (state.mode === "cable" || state.mode === "voltra") drawCable(ctx, T, state, currentTheta);
 
   // User body with arm connected to the handle at the current pose.
   if (state.showBody) drawBody(ctx, T, state, handlePos(state, currentTheta));
@@ -669,6 +802,14 @@ export function renderScene(canvas, state, currentTheta) {
 
   // Rack bracket over everything at the pivot.
   drawRackBracket(ctx, T, T.toPx(state.pivot));
+
+  const handles = makeSceneHandles(T, state, currentTheta);
+  drawSceneHandles(ctx, handles);
+
+  return {
+    handles,
+    screenToWorld: T.toWorld,
+  };
 }
 
 // Force arrow: shows the direction and relative magnitude of the force the

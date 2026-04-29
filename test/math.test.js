@@ -10,6 +10,11 @@ import {
   sweep,
 } from "../src/physics.js";
 import { overlaySeries } from "../src/strength-curves.js";
+import {
+  defaultVoltraPoints,
+  resampleVoltraPoints,
+  voltraForceKgfAt,
+} from "../src/voltra-curve.js";
 
 const G = 9.80665;
 const EPS = 1e-9;
@@ -35,6 +40,9 @@ function baseState() {
     plateKgBracket: 0,
     stackKg: 0,
     cableMA: 1,
+    voltraMaxKgf: 100,
+    voltraPointCount: 7,
+    voltraPoints: defaultVoltraPoints(7, 40),
     pulley: { x: 0, y: 0 },
     armMassKg: 0,
     armComFrac: 0.5,
@@ -109,6 +117,58 @@ test("single-sample sweep and overlays stay finite", () => {
   assert.equal(overlay.length, 1);
   assert.equal(overlay[0].t, 0);
   assert.ok(Number.isFinite(overlay[0].fN));
+});
+
+test("voltra curve interpolates and resamples editable points", () => {
+  const points = [
+    { t: 0, fKgf: 10 },
+    { t: 0.5, fKgf: 30 },
+    { t: 1, fKgf: 20 },
+  ];
+
+  assertClose(voltraForceKgfAt(points, 0.25, 100), 20);
+  assertClose(voltraForceKgfAt(points, 0.75, 100), 25);
+  assertClose(voltraForceKgfAt(points, -1, 100), 10);
+  assertClose(voltraForceKgfAt(points, 2, 100), 20);
+
+  const resampled = resampleVoltraPoints(points, 5, 100);
+  assert.equal(resampled.length, 5);
+  assertClose(resampled[0].fKgf, 10);
+  assertClose(resampled[2].fKgf, 30);
+  assertClose(resampled[4].fKgf, 20);
+});
+
+test("voltra mode uses the programmed curve as cable source force", () => {
+  const state = {
+    ...baseState(),
+    mode: "voltra",
+    lArm: 1,
+    lWeightMount: 1,
+    lHandle: 0,
+    lWeight: 0,
+    aWeight: 0,
+    pulley: { x: 1, y: 1 },
+    plateKg: 0,
+    armMassKg: 0,
+    romStart: -Math.PI / 4,
+    romEnd: Math.PI / 4,
+    voltraMaxKgf: 100,
+    voltraPoints: [
+      { t: 0, fKgf: 12 },
+      { t: 0.5, fKgf: 48 },
+      { t: 1, fKgf: 24 },
+    ],
+  };
+
+  const samples = sweep(state, 5);
+  for (let i = 0; i < samples.length; i++) {
+    const equivalentCable = {
+      ...state,
+      mode: "cable",
+      stackKg: voltraForceKgfAt(state.voltraPoints, i / (samples.length - 1), state.voltraMaxKgf),
+    };
+    assertClose(samples[i].fKgf, forceAtHandle(equivalentCable, samples[i].theta) / G);
+  }
 });
 
 test("arm IK handles coincident shoulder and hand positions", () => {
