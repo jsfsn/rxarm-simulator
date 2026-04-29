@@ -3,6 +3,7 @@ import {
   peakForce,
   minForce,
   handlePos,
+  weightPos,
   handleBracketPos,
   weightBracketPos,
 } from "./physics.js";
@@ -649,6 +650,16 @@ function redraw() {
   const rackFaceX = state.pivot.x + 0.02;
   $("#stat-handle-x").textContent = `${((h.x - rackFaceX) * 100).toFixed(0)} cm`;
   $("#stat-handle-y").textContent = `${(h.y * 100).toFixed(0)} cm`;
+
+  if (state.mode === "cable" || state.mode === "voltra") {
+    const attachment = weightPos(ps, currentTheta);
+    const dx = attachment.x - state.pulley.x;
+    const dy = attachment.y - state.pulley.y;
+    const angle = Math.atan2(dy, dx) / DEG;
+    $("#stat-cable-angle").textContent = `${angle.toFixed(0)}°`;
+  } else {
+    $("#stat-cable-angle").textContent = "—";
+  }
 
   // Arm-reach indicator
   if (state.showBody) {

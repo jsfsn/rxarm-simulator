@@ -498,12 +498,18 @@ function drawVoltraUnit(ctx, T, pulleyPx) {
   const y = pulleyPx.y - unitH * 0.5;
   const r = Math.max(5, Math.min(9, unitW * 0.12));
 
+  ctx.save();
+  ctx.globalAlpha = 0.46;
   ctx.fillStyle = COL.voltra;
+  ctx.beginPath();
+  roundedRectPath(ctx, x, y, unitW, unitH, r);
+  ctx.fill();
+  ctx.restore();
+
   ctx.strokeStyle = COL.stackRim;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   roundedRectPath(ctx, x, y, unitW, unitH, r);
-  ctx.fill();
   ctx.stroke();
 
   ctx.strokeStyle = COL.voltraAccent;
