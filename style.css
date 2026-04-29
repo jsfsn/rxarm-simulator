@@ -258,6 +258,31 @@ canvas { display: block; width: 100%; height: 100%; }
   padding: 4px 6px;
   font: inherit;
 }
+.controls .config-string {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  margin-top: 4px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px;
+  font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.controls .config-string:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.controls .config-status {
+  min-height: 18px;
+  margin-top: 6px;
+  color: var(--accent-2);
+  font-size: 12px;
+}
+.controls .config-status.error {
+  color: var(--danger);
+}
 .controls .radio, .controls .checkbox {
   display: flex;
   align-items: center;

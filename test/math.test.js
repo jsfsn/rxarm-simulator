@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { solveArmIK } from "../src/body.js";
+import { decodeConfig, encodeConfig, extractConfigString } from "../src/config-codec.js";
 import {
   effectiveHandleRadius,
   effectiveLever,
@@ -169,6 +170,71 @@ test("voltra mode uses the programmed curve as cable source force", () => {
     };
     assertClose(samples[i].fKgf, forceAtHandle(equivalentCable, samples[i].theta) / G);
   }
+});
+
+test("config strings round-trip simulator UI state compactly", () => {
+  const uiState = {
+    mode: "voltra",
+    pivot: { x: 0, y: 1.37 },
+    lArm: 0.579,
+    lWeightMount: 0.29,
+    lHandle: 0.31,
+    aHandle: 14,
+    lWeight: 0.45,
+    aWeight: -72,
+    plateKg: 42.5,
+    plateKgBracket: 15,
+    stackKg: 37.5,
+    cableMA: 1.7,
+    voltraMaxKgf: 155,
+    voltraPointCount: 7,
+    voltraPoints: [
+      { t: 0, fKgf: 20 },
+      { t: 0.18, fKgf: 35.4 },
+      { t: 0.35, fKgf: 42.1 },
+      { t: 0.5, fKgf: 50 },
+      { t: 0.66, fKgf: 46.6 },
+      { t: 0.82, fKgf: 39.2 },
+      { t: 1, fKgf: 30 },
+    ],
+    pulley: { x: -0.84, y: 0.52 },
+    armMassKg: 6.5,
+    armComFrac: 0.47,
+    romStart: -22,
+    romEnd: 54,
+    currentAngle: 8,
+    forceDir: "perpMain",
+    xAxis: "angle",
+    unit: "kgf",
+    overlay: "bell",
+    animate: false,
+    showBody: true,
+    userHeight: 1.83,
+    benchAngle: 17,
+    hipX: 0.91,
+    hipY: 0.53,
+  };
+
+  const encoded = encodeConfig(uiState);
+  assert.match(encoded, /^rx1\.[A-Za-z0-9_-]+$/u);
+  assert.ok(encoded.length < 360, `expected compact config, got ${encoded.length} chars`);
+
+  const decoded = decodeConfig(encoded);
+  assert.equal(decoded.mode, uiState.mode);
+  assertClose(decoded.pivot.y, uiState.pivot.y);
+  assertClose(decoded.lArm, uiState.lArm);
+  assertClose(decoded.aHandle, uiState.aHandle);
+  assertClose(decoded.aWeight, uiState.aWeight);
+  assertClose(decoded.pulley.x, uiState.pulley.x);
+  assertClose(decoded.pulley.y, uiState.pulley.y);
+  assert.equal(decoded.overlay, uiState.overlay);
+  assert.equal(decoded.voltraPoints.length, uiState.voltraPoints.length);
+  assertClose(decoded.voltraPoints[1].t, uiState.voltraPoints[1].t);
+  assertClose(decoded.voltraPoints[1].fKgf, uiState.voltraPoints[1].fKgf);
+  assert.equal(
+    extractConfigString(`https://example.test/#cfg=${encodeURIComponent(encoded)}`),
+    encoded,
+  );
 });
 
 test("arm IK handles coincident shoulder and hand positions", () => {

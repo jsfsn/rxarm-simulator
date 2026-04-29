@@ -9,6 +9,7 @@ import {
 import { anatomy, shoulderPos, solveArmIK } from "./body.js";
 import { renderScene } from "./render.js";
 import { renderPlot } from "./plot.js";
+import { decodeConfig, encodeConfig } from "./config-codec.js";
 import {
   defaultVoltraPoints,
   normalizeVoltraPoints,
@@ -199,6 +200,21 @@ function setControlValue(id, value) {
   const next = clampToInput(id, value);
   setState(id, next);
   syncControl(id);
+}
+
+function syncAllControls() {
+  syncFixedReadouts();
+  SLIDER_IDS.forEach(syncControl);
+  $("#forceDir").value = state.forceDir;
+  $("#xAxis").value = state.xAxis;
+  $("#unit").value = state.unit;
+  $("#overlay").value = state.overlay;
+  $("#voltraPointCount").value = String(state.voltraPointCount);
+  $("#animate").checked = state.animate;
+  $("#showBody").checked = state.showBody;
+  document.querySelectorAll(`input[name="mode"]`).forEach((el) => {
+    el.checked = el.value === state.mode;
+  });
 }
 
 function bindRadio(name, key) {
@@ -465,6 +481,62 @@ function bindVoltraControls() {
   });
 }
 
+function syncConfigString(force = false) {
+  const el = $("#configString");
+  if (!el) return;
+  if (force || document.activeElement !== el) {
+    el.value = encodeConfig(state);
+  }
+}
+
+function setConfigStatus(text, isError = false) {
+  const el = $("#configStatus");
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle("error", isError);
+}
+
+function applyConfig(nextState) {
+  Object.assign(state, defaultState(), nextState);
+  syncAllControls();
+  redraw();
+  syncConfigString(true);
+}
+
+function bindConfigControls() {
+  $("#configCopy").addEventListener("click", async () => {
+    syncConfigString(true);
+    const el = $("#configString");
+    try {
+      await navigator.clipboard.writeText(el.value);
+      setConfigStatus("Copied");
+    } catch {
+      el.select();
+      setConfigStatus("Selected");
+    }
+  });
+
+  $("#configLoad").addEventListener("click", () => {
+    try {
+      applyConfig(decodeConfig($("#configString").value));
+      setConfigStatus("Loaded");
+    } catch {
+      setConfigStatus("Invalid config", true);
+    }
+  });
+
+  $("#configString").addEventListener("input", () => setConfigStatus(""));
+}
+
+function loadConfigFromLocation() {
+  if (!location.hash && !location.search) return;
+  try {
+    Object.assign(state, defaultState(), decodeConfig(location.href));
+  } catch {
+    // Ignore invalid/missing URL config and keep defaults.
+  }
+}
+
 function redraw() {
   const ps = physicsState(state);
   const samples = sweep(ps, 181);
@@ -525,6 +597,8 @@ function redraw() {
     $("#stat-arm-reach").textContent = "—";
     $("#stat-arm-reach").style.color = "";
   }
+
+  syncConfigString();
 }
 
 const SLIDER_IDS = [
@@ -576,29 +650,14 @@ function toggleAnimation() {
 
 function resetAll() {
   Object.assign(state, defaultState());
-  syncFixedReadouts();
-  SLIDER_IDS.forEach((id) => {
-    const el = $(`#${id}`);
-    if (!el) return;
-    const v = getStateVal(id);
-    el.value = v;
-    const out = $(`#${id}-val`);
-    if (out) out.textContent = formatVal(id, v);
-  });
-  $("#forceDir").value = state.forceDir;
-  $("#xAxis").value = state.xAxis;
-  $("#unit").value = state.unit;
-  $("#overlay").value = state.overlay;
-  $("#voltraPointCount").value = String(state.voltraPointCount);
-  $("#animate").checked = state.animate;
-  $("#showBody").checked = state.showBody;
-  document.querySelectorAll(`input[name="mode"]`).forEach((el) => {
-    el.checked = el.value === state.mode;
-  });
+  syncAllControls();
   redraw();
+  syncConfigString(true);
+  setConfigStatus("");
 }
 
 function initApp() {
+  loadConfigFromLocation();
   syncFixedReadouts();
   SLIDER_IDS.forEach(bindSlider);
   bindRadio("mode", "mode");
@@ -611,6 +670,7 @@ function initApp() {
   bindSceneEditor();
   bindVoltraControls();
   bindVoltraPlotEditor();
+  bindConfigControls();
   $("#reset").addEventListener("click", resetAll);
   window.addEventListener("resize", resizeAll);
   window.visualViewport?.addEventListener("resize", resizeAll);

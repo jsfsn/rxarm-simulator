@@ -17,6 +17,12 @@ python3 -m http.server 8000
 
 (Opening `index.html` via `file://` won't work because the JS uses ES modules.)
 
+## Share Configs
+
+The **Share config** panel stores the current simulator setup as a compact
+`rx1.` string. Paste the string back into the same field and press **Load** to
+restore it. Shared URLs can also use `#cfg=<rx1-string>`.
+
 ## Test
 
 The project has a small Node test suite for the core geometry and torque
